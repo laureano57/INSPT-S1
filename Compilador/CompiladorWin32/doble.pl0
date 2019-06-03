@@ -1,0 +1,9 @@
+const k = 2;
+var x;
+begin
+	write('Ingrese un valor: ');
+	readln(x);
+	write('El doble de ');
+	write(X);
+	writeln(' es: ', x*k);
+end;

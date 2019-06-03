@@ -1,0 +1,14 @@
+var A, B, C;
+
+begin
+  write('Ingrese el primer numero: ');
+  readln (A);
+  write ('Ingrese el ', 2, 'ndo. numero: ');
+  readln (B);
+  while (A >= B) readln(B);
+  while (A <> C) readln(A);
+  while (A <= C) readln(A);
+  while (A > C) readln(A);
+  while (A < C) readln(A);
+  writeln ('La suma de ambos es: ', A + B)
+end.
