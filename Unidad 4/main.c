@@ -61,6 +61,16 @@ void concatenar(char*, char);
 
 void uppercase(char*);
 
+/*** Funciones para el analizador sintactico ***/
+
+void programa(tSimbolo, FILE * archivo);
+void bloque(tSimbolo, FILE * archivo);
+void proposicion(tSimbolo, FILE * archivo);
+void condicion(tSimbolo, FILE * archivo);
+void expresion(tSimbolo, FILE * archivo);
+void termino(tSimbolo, FILE * archivo);
+void factor(tSimbolo, FILE * archivo);
+
 /*** MAIN ***/
 
 int main(int argc, char* argv[]) {
@@ -69,15 +79,24 @@ int main(int argc, char* argv[]) {
     // } else {
         FILE* archivo;
         // archivo = fopen(argv[1], "r");
-        archivo = fopen("ejemplo.pl0", "r");
+        archivo = fopen("ejemplo.pl0", "r");    // Harcodea nombre de archivo
         if (archivo == NULL) {
             printf("Error de apertura del archivo [%s].\n", argv[1]);
         } else {
             tSimbolo s;
-            do {
-                s = aLex(archivo);
-                imprimir(s);
-            } while(s.simbolo != FIN_DE_ARCHIVO);
+            s = aLex(archivo);
+            programa(s, archivo);
+            if (s.simbolo == FIN_DE_ARCHIVO) {
+                printf("Archivo procesado exitosamente\n");
+            } else {
+                // error(algo, algo);
+                printf("Error: sobra algo despues del punto\n");
+            }
+            // Para probar el analizador lexico
+            // do {
+            //     s = aLex(archivo);
+            //     imprimir(s);
+            // } while(s.simbolo != FIN_DE_ARCHIVO);
             fclose(archivo);
         }
     // }
@@ -186,18 +205,6 @@ tSimbolo aLex(FILE* fp) {
                     a.simbolo = NULO;
                 }
                 break;
-            // case '<': a.simbolo = MENOR;
-            //     break;
-            // case '<': a.simbolo = MENOR;
-            //     break;
-            // case '<': a.simbolo = MENOR;
-            //     break;
-            // case '<': a.simbolo = MENOR;
-            //     break;
-            // case '<': a.simbolo = MENOR;
-            //     break;
-            // case '<': a.simbolo = MENOR;
-            //     break;
             default: a.simbolo = NULO;
         }
     }
@@ -293,3 +300,267 @@ void uppercase(char* s) {
     for (; *s; s++)
         *s = toupper(*s);
 }
+
+void error(int codigo, tSimbolo s) {
+    switch(codigo) {
+        case 0:
+            printf("Error, %s\n", s.cadena);
+            break;
+        case 1:
+            printf("Error, se esperaba un IDENT: %s\n", s.cadena);
+            break;
+        case 2:
+            printf("Error, se esperaba un IGUAL: %s\n", s.cadena);
+            break;
+        case 3:
+            printf("Error, se esperaba un NUMERO: %s\n", s.cadena);
+            break;
+        case 4:
+            printf("Error, se esperaba un PTOCOMA: %s\n", s.cadena);
+            break;
+        // COMPLETAR TODOS LOS CASOS DE ERROR!
+        // case 1:
+        //     printf("Error, se esperaba un IDENT: %s\n", s.cadena);
+        //     break;
+        // case 1:
+        //     printf("Error, se esperaba un IDENT: %s\n", s.cadena);
+        //     break;
+        // case 1:
+        //     printf("Error, se esperaba un IDENT: %s\n", s.cadena);
+        //     break;
+        // case 1:
+        //     printf("Error, se esperaba un IDENT: %s\n", s.cadena);
+        //     break;
+        // case 1:
+        //     printf("Error, se esperaba un IDENT: %s\n", s.cadena);
+        //     break;
+        // case 1:
+        //     printf("Error, se esperaba un IDENT: %s\n", s.cadena);
+        //     break;
+        default:
+            printf("Error generico\n");
+            break;
+    }
+}
+
+/*** Analizador sintactico ***/
+
+void programa(tSimbolo s, FILE *archivo) {
+    bloque(s, archivo);
+    if (s.simbolo == PUNTO) s = aLex(archivo);
+    else error(0, s);
+}
+
+void bloque(tSimbolo s, FILE *archivo) {
+    if (s.simbolo == CONST) {
+        s = aLex(archivo);
+        if (s.simbolo == IDENT) s = aLex(archivo);
+        else error(1, s);
+        if (s.simbolo == IGUAL) s = aLex(archivo);
+        else error(2, s);
+        if (s.simbolo == NUMERO) s = aLex(archivo);
+        else error(3, s);
+        while (s.simbolo == COMA) {
+            s = aLex(archivo);
+            if (s.simbolo == IDENT) s = aLex(archivo);
+            else error(1, s);
+            if (s.simbolo == IGUAL) s = aLex(archivo);
+            else error(2, s);
+            if (s.simbolo == NUMERO) s = aLex(archivo);
+            else error(3, s);
+        }
+        if (s.simbolo == PTOCOMA) s = aLex(archivo);
+        else error(4, s);
+    }
+    if (s.simbolo == VAR) {
+        s = aLex(archivo);
+        if (s.simbolo == IDENT) s = aLex(archivo);
+        else error(1, s);
+        while (s.simbolo == COMA) {
+            if (s.simbolo == IDENT) s = aLex(archivo);
+            else error(1, s);
+        }
+        if (s.simbolo == PTOCOMA) s = aLex(archivo);
+        else error(4, s);
+    }
+    while (s.simbolo == PROCEDURE) {
+        s = aLex(archivo);
+        if (s.simbolo == IDENT) s = aLex(archivo);
+        else 
+    }
+    proposicion(s, archivo);
+}
+
+void proposicion(tSimbolo s, FILE *archivo) {
+    switch(s.simbolo){
+    case IDENT:
+        s = aLex(archivo);
+        if (s.simbolo == ASIGNACION) {
+            s = aLex(archivo);
+        }
+        else error(6, s); // Se esperaba asignacion
+        expresion(s, archivo);
+        break;
+    case CALL:
+        s = aLex(archivo);
+        if (s.simbolo == IDENT)
+            s = aLex(archivo);
+        else error(2, s);
+        break;
+    case BEGIN:
+        s = aLex(archivo);
+        proposicion(s, archivo);
+        while (s.simbolo == PTOCOMA) {
+            s = alex;
+            proposicion(s, archivo);
+        }
+        if (s.simbolo == END) {
+            s = aLex(archivo);
+            else error(7, s); // Se esperaba END
+        }
+        break;
+    case IF:
+        s = aLex(archivo);
+        condicion(s, archivo);
+        if (s.simbolo == THEN)
+            s = aLex(archivo);
+        else error(8, s); // Se esperaba THEN
+        proposicion(s, archivo);
+        break;
+    case WHILE:
+        s = aLex(archivo);
+        condicion(s, archivo);
+        if (s.simbolo == DO)
+            s = aLex(archivo);
+        else error(9, s); // Se esperaba DO
+        proposicion(s, archivo);
+        break;
+    case READLN:
+        s = aLex(archivo);
+        if (s.simbolo == ABREPAREN)
+            s = aLex(archivo);
+        else error(10, s); // Se esperaba ABREPAREN
+        if (s.simbolo == IDENT)
+            s = aLex(archivo);
+        else error(2, s); // Se esperaba IDENT
+        while (s.simbolo == COMA) {
+            s = aLex(archivo);
+            if (s.simbolo == IDENT)
+                s = aLex(archivo);
+            else error(2, s); // Se esperaba IDENT
+        }
+        if (s.simbolo == CIERRAPAREN)
+            s = aLex(archivo);
+        else error(11, s); // Se esperaba CIERRAPAREN
+        break;
+    case WRITE:
+        s = aLex(archivo);
+        if (s.simbolo == ABREPAREN)
+            s = aLex(archivo);
+        else error(10, s);
+        if (s.simbolo == CADENA)
+            s = aLex(archivo);
+        else expresion(s, archivo);
+        while (s.simbolo == COMA) {
+            s = aLex(archivo);
+            if (s.simbolo == CADENA)
+                s = aLex(archivo);
+            else expresion(s, archivo);
+        }
+        else expresion(s, archivo);
+        if (s.simbolo == CIERRAPAREN)
+            s = aLex(archivo);
+        else error(11, s); // Se esperaba CIERRAPAREN
+        break;
+    case WRITELN:
+        // probar esto, medio dudoso y mal explicado
+        s = aLex(archivo);
+        if (s.simbolo == ABREPAREN) {
+            s = aLex(archivo);
+            if (s.simbolo == CADENA)
+                s = aLex(archivo);
+            else expresion(s, archivo);
+            while (s.simbolo == COMA) {
+                s = aLex(archivo);
+                if (s.simbolo == CADENA)
+                    s = aLex(archivo);
+                else expresion(s, archivo);
+            }
+            else expresion(s, archivo);
+            if (s.simbolo == CIERRAPAREN)
+                s = aLex(archivo);
+            else error(11, s); // Se esperaba CIERRAPAREN
+        }
+    }
+}
+
+void condicion(tSimbolo s, FILE *archivo) {
+    if (s.simbolo == ODD) {
+         s = aLex(archivo);
+         expresion(s, archivo);
+    } else {
+        expresion(s, archivo);
+        switch(s.simbolo) {
+            case IGUAL:
+                s = aLex(archivo);
+                break;
+            case DISTINTO:
+                s = aLex(archivo);
+                break;
+            case MAYOR:
+                s = aLex(archivo);
+                break;
+            case MENOR:
+                s = aLex(archivo);
+                break;
+            case MAYORIGUAL:
+                s = aLex(archivo);
+                break;
+            case MENORIGUAL:
+                s = aLex(archivo);
+                break;
+            default:
+                error(12, s); // Se esperaba un operador relacional
+        }
+    }
+}
+
+void expresion(tSimbolo s, FILE *archivo) {
+    if (s.simbolo == MAS) s = aLex(archivo);
+    else if (s.simbolo = MENOS) s = aLex(archivo);
+    termino(s, archivo);
+    while (s.simbolo == MAS || s.simbolo == MENOS) {
+        s = aLex(archivo);
+        termino(s, archivo);
+    }
+}
+
+void termino(tSimbolo s, FILE *archivo) {
+    factor(s, archivo);
+    while (s.simbolo == POR || s.simbolo == DIVIDIDO) {
+        aLex(archivo);
+        factor(s, archivo);
+    }
+}
+
+void factor(tSimbolo s, FILE *archivo) {
+    switch(s.simbolo) {
+        case IDENT:
+            s = aLex(archivo);
+            break;
+        case NUMERO:
+            s = aLex(archivo);
+            break;
+        case ABREPAREN:
+            s = aLex(archivo);
+            expresion(s, archivo);
+            if (s.simbolo == CIERRAPAREN)
+                s = aLex(archivo);
+            else error(11, s); // Se esperaba CIERRAPAREN
+            break;
+    }
+}
+
+
+// Al terminar el switch de la funcion error, meter exit(0); para detener ejecucion
+
