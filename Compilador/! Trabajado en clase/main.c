@@ -110,7 +110,6 @@ int main(int argc, char *argv[]) {
       printf("Archivo procesado exitosamente\n");
     } else {
       error(0, s);
-      // printf("Error: sobra algo despues del punto\n");
     }
 
     // ########## Para probar el analizador lexico ##########
