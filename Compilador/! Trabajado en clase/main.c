@@ -1,11 +1,16 @@
 #include <ctype.h> /* Para usar isgraph, etc. */
 #include <stdio.h>
 #include <string.h> /* Para usar strlen, etc. */
+#include <stdlib.h> 
 
 /********************************** CONSTANTES ***********************************/
 
-#define MAX_LONGITUD_CADENA                                                    \
-  128 /* es a longitud neta, sin los apóstrofos ni el cero final */
+#define MAX_LONGITUD_CADENA 128 /* es a longitud neta, sin los apóstrofos ni el cero final */
+#define MAX_CANT_IDENT 1024 /* es a longitud de la tabla de identificadores */
+
+// #define ARCHIVO "ejemplo.pl0"
+// #define ARCHIVO "BIEN-00.PL0"
+#define ARCHIVO "test.pl0"
 
 /********************************* NUEVOS TIPOS **********************************/
 
@@ -52,6 +57,14 @@ typedef struct {
   char cadena[MAX_LONGITUD_CADENA + 3]; /* más los apóstrofos y el cero final */
 } tSimbolo;
 
+typedef struct {
+  tTerminal tipo;
+  char nombre[MAX_LONGITUD_CADENA + 3];
+  int valor;
+} tEntradaTabla;
+
+typedef tEntradaTabla tablaDeIdent [MAX_CANT_IDENT];
+
 /************************ NUEVAS FUNCIONES (PROTOTIPOS) *************************/
 
 tSimbolo aLex(FILE *);
@@ -62,15 +75,19 @@ void concatenar(char *, char);
 
 void uppercase(char *);
 
+void error(int codigo, tSimbolo s);
+
+int buscarIdent(char *, tablaDeIdent, int, int);
+
 /********************* Funciones del analizador sintactico **********************/
 
 tSimbolo programa(tSimbolo, FILE *archivo);
-tSimbolo bloque(tSimbolo, FILE *archivo);
-tSimbolo proposicion(tSimbolo, FILE *archivo);
-tSimbolo condicion(tSimbolo, FILE *archivo);
-tSimbolo expresion(tSimbolo, FILE *archivo);
-tSimbolo termino(tSimbolo, FILE *archivo);
-tSimbolo factor(tSimbolo, FILE *archivo);
+tSimbolo bloque(tSimbolo, FILE *archivo, tablaDeIdent, int base);
+tSimbolo proposicion(tSimbolo, FILE *archivo, tablaDeIdent, int posUltimoIdent);
+tSimbolo condicion(tSimbolo, FILE *archivo, tablaDeIdent, int posUltimoIdent);
+tSimbolo expresion(tSimbolo, FILE *archivo, tablaDeIdent, int posUltimoIdent);
+tSimbolo termino(tSimbolo, FILE *archivo, tablaDeIdent, int posUltimoIdent);
+tSimbolo factor(tSimbolo, FILE *archivo, tablaDeIdent, int posUltimoIdent);
 
 /************************************ MAIN ************************************/
 
@@ -80,7 +97,7 @@ int main(int argc, char *argv[]) {
   // } else {
   FILE *archivo;
   // archivo = fopen(argv[1], "r");
-  archivo = fopen("ejemplo.pl0", "r"); // Harcodea nombre de archivo
+  archivo = fopen(ARCHIVO, "r"); // Harcodea nombre de archivo
   if (archivo == NULL) {
     printf("Error de apertura del archivo [%s].\n", argv[1]);
   } else {
@@ -90,8 +107,8 @@ int main(int argc, char *argv[]) {
     if (s.simbolo == FIN_DE_ARCHIVO) {
       printf("Archivo procesado exitosamente\n");
     } else {
-      // error(algo, algo);
-      printf("Error: sobra algo despues del punto\n");
+      error(0, s);
+      // printf("Error: sobra algo despues del punto\n");
     }
 
     /******** Para probar el analizador lexico ********/
@@ -113,8 +130,7 @@ tSimbolo aLex(FILE *fp) {
   char c;
   do {
     c = getc(fp);
-  } while (c != EOF &&
-           !isgraph(c)); /* corta cuando c==EOF o cuando isgraph(c)==true */
+  } while (c != EOF && !isgraph(c)); /* corta cuando c==EOF o cuando isgraph(c)==true */
 
   if (c == EOF) {
     a.simbolo = FIN_DE_ARCHIVO;
@@ -125,17 +141,12 @@ tSimbolo aLex(FILE *fp) {
         c = getc(fp);
         if (isalpha(c) || isdigit(c))
           concatenar(a.cadena, c);
-      } while (
-          c != EOF &&
-          (isalpha(c) ||
-           isdigit(
-               c))); /* corta cuando c==EOF o cuando c no es letra ni dígito */
-      ungetc(c, fp); /* el char que provocó el fin de la cadena debe volver a
-                        leerse en el próximo llamado a aLex */
-      char cadenaAux[MAX_LONGITUD_CADENA +
-                     3]; /* más los apóstrofos y el cero final */
+      } while (c != EOF && (isalpha(c) || isdigit(c))); /* corta cuando c==EOF o cuando c no es letra ni dígito */
+      ungetc(c, fp); /* el char que provocó el fin de la cadena debe volver a leerse en el próximo llamado a aLex */
+      char cadenaAux[MAX_LONGITUD_CADENA + 3]; /* más los apóstrofos y el cero final */
       strcpy(cadenaAux, a.cadena);
       uppercase(cadenaAux);
+
       if (strcmp(cadenaAux, "BEGIN") == 0)
         a.simbolo = BEGIN;
       else if (strcmp(cadenaAux, "CALL") == 0)
@@ -171,10 +182,8 @@ tSimbolo aLex(FILE *fp) {
         c = getc(fp);
         if (isdigit(c))
           concatenar(a.cadena, c);
-      } while (c != EOF &&
-               isdigit(c)); /* corta cuando c==EOF o cuando c no es dígito */
-      ungetc(c, fp); /* el char que provocó el fin de la cadena debe volver a
-                        leerse en el próximo llamado a aLex */
+      } while (c != EOF && isdigit(c)); /* corta cuando c==EOF o cuando c no es dígito */
+      ungetc(c, fp);  /* el char que provocó el fin de la cadena debe volver a leerse en el próximo llamado a aLex */
       a.simbolo = NUMERO;
     } else
       switch (c) {
@@ -183,9 +192,7 @@ tSimbolo aLex(FILE *fp) {
           c = getc(fp);
           if (c != EOF && c != '\n')
             concatenar(a.cadena, c);
-        } while (c != EOF && c != '\n' && c != '\''); /* corta cuando c==EOF o
-                                                         c=='\n' o cuando c es
-                                                         un apóstrofo */
+        } while (c != EOF && c != '\n' && c != '\''); /* corta cuando c==EOF o c=='\n' o cuando c es un apóstrofo */
         if (c == EOF || c == '\n') {
           a.simbolo = NULO;
           ungetc(c, fp);
@@ -259,6 +266,7 @@ tSimbolo aLex(FILE *fp) {
         a.simbolo = NULO;
       }
   }
+  imprimir(a);
   return a;
 }
 
@@ -391,120 +399,181 @@ void uppercase(char *s) {
 void error(int codigo, tSimbolo s) {
   switch (codigo) {
   case 0:
-    printf("Error, %s\n", s.cadena);
+    printf("Error al leer final de archivo: %s\n", s.cadena);
     break;
   case 1:
-    printf("Error, se esperaba un IDENT: %s\n", s.cadena);
+    printf("Error, se esperaba un PUNTO: %s\n", s.cadena);
     break;
   case 2:
-    printf("Error, se esperaba un IGUAL: %s\n", s.cadena);
+    printf("Error, se esperaba un IDENT: %s\n", s.cadena);
     break;
   case 3:
-    printf("Error, se esperaba un NUMERO: %s\n", s.cadena);
+    printf("Error, se esperaba un IGUAL: %s\n", s.cadena);
     break;
   case 4:
+    printf("Error, se esperaba un NUMERO: %s\n", s.cadena);
+    break;
+  case 5:
     printf("Error, se esperaba un PTOCOMA: %s\n", s.cadena);
     break;
-  // COMPLETAR TODOS LOS CASOS DE ERROR!
-  // case 1:
-  //     printf("Error, se esperaba un IDENT: %s\n", s.cadena);
-  //     break;
-  // case 1:
-  //     printf("Error, se esperaba un IDENT: %s\n", s.cadena);
-  //     break;
-  // case 1:
-  //     printf("Error, se esperaba un IDENT: %s\n", s.cadena);
-  //     break;
-  // case 1:
-  //     printf("Error, se esperaba un IDENT: %s\n", s.cadena);
-  //     break;
-  // case 1:
-  //     printf("Error, se esperaba un IDENT: %s\n", s.cadena);
-  //     break;
-  // case 1:
-  //     printf("Error, se esperaba un IDENT: %s\n", s.cadena);
-  //     break;
+  case 6:
+    printf("Error, se esperaba un ASIGNACION: %s\n", s.cadena);
+    break;
+  case 7:
+    printf("Error, se esperaba un END: %s\n", s.cadena);
+    break;
+  case 8:
+    printf("Error, se esperaba un THEN: %s\n", s.cadena);
+    break;
+  case 9:
+    printf("Error, se esperaba un DO: %s\n", s.cadena);
+    break;
+  case 10:
+    printf("Error, se esperaba un ABREPAREN: %s\n", s.cadena);
+    break;
+  case 11:
+    printf("Error, se esperaba un CIERRAPAREN: %s\n", s.cadena);
+    break;
+  case 12:
+    printf("Error semantico, se repite el identificador(?): %s\n", s.cadena);
+    break;
+  case 13:
+    printf("Error semantico, el identificador debe ser de tipo VAR: %s\n", s.cadena);
+    break;
   default:
     printf("Error generico\n");
     break;
   }
+  exit(1);
 }
 
 /*************************** Analizador sintactico ***************************/
 
 tSimbolo programa(tSimbolo s, FILE *archivo) {
-  s = bloque(s, archivo);
+  // Declaramos tabla de identificadores para el analizador semantico
+  tablaDeIdent tabla;
+
+  s = bloque(s, archivo, tabla, 0);
   if (s.simbolo == PUNTO)
     s = aLex(archivo);
   else
-    error(0, s);
+    error(1, s);
   return s;
 }
 
-tSimbolo bloque(tSimbolo s, FILE *archivo) {
+tSimbolo bloque(tSimbolo s, FILE *archivo, tablaDeIdent tabla, int base) {
+  int desplazamiento = 0;
+
   if (s.simbolo == CONST) {
+    int p;
     s = aLex(archivo);
-    if (s.simbolo == IDENT)
+    if (s.simbolo == IDENT) {
+      p = buscarIdent(s.cadena, tabla, base, (base + desplazamiento - 1));
+      if (p == -1) {
+        tabla[base + desplazamiento].tipo = CONST;
+        strcpy(tabla[base + desplazamiento].nombre, s.cadena);
+      } else {
+        error(12, s);
+      }
       s = aLex(archivo);
+    }
     else
-      error(1, s);
+      error(2, s);
     if (s.simbolo == IGUAL)
       s = aLex(archivo);
     else
-      error(2, s);
-    if (s.simbolo == NUMERO)
-      s = aLex(archivo);
-    else
       error(3, s);
+    if (s.simbolo == NUMERO) {
+      tabla[base + desplazamiento].valor = atoi(s.cadena);
+      desplazamiento++;
+      s = aLex(archivo);
+    }
+    else
+      error(4, s);
     while (s.simbolo == COMA) {
       s = aLex(archivo);
       if (s.simbolo == IDENT)
-        s = aLex(archivo);
-      else
-        error(1, s);
-      if (s.simbolo == IGUAL)
         s = aLex(archivo);
       else
         error(2, s);
-      if (s.simbolo == NUMERO)
+      if (s.simbolo == IGUAL)
         s = aLex(archivo);
       else
         error(3, s);
-    }
-    if (s.simbolo == PTOCOMA)
-      s = aLex(archivo);
-    else
-      error(4, s);
-  }
-  if (s.simbolo == VAR) {
-    s = aLex(archivo);
-    if (s.simbolo == IDENT)
-      s = aLex(archivo);
-    else
-      error(1, s);
-    while (s.simbolo == COMA) {
-      if (s.simbolo == IDENT)
+      if (s.simbolo == NUMERO)
         s = aLex(archivo);
       else
-        error(1, s);
+        error(4, s);
     }
     if (s.simbolo == PTOCOMA)
-      s = aLex(archivo);
-    else
-      error(4, s);
-  }
-  while (s.simbolo == PROCEDURE) {
-    s = aLex(archivo);
-    if (s.simbolo == IDENT)
       s = aLex(archivo);
     else
       error(5, s);
   }
-  s = proposicion(s, archivo);
+  if (s.simbolo == VAR) {
+    int p;
+    s = aLex(archivo);
+    if (s.simbolo == IDENT) {
+      p = buscarIdent(s.cadena, tabla, base, (base + desplazamiento - 1));
+      if (p == -1) {
+        tabla[base + desplazamiento].tipo = VAR;
+        strcpy(tabla[base + desplazamiento].nombre, s.cadena);
+        tabla[base + desplazamiento].valor = 0;
+        desplazamiento++;
+      } else {
+        error(12, s);
+      }
+
+      s = aLex(archivo);
+    }
+    else
+      error(2, s);
+    while (s.simbolo == COMA) {
+      s = aLex(archivo);
+      if (s.simbolo == IDENT)
+        s = aLex(archivo);
+      else
+        error(2, s);
+    }
+
+    if (s.simbolo == PTOCOMA)
+      s = aLex(archivo);
+    else
+      error(5, s);
+  }
+  while (s.simbolo == PROCEDURE) {
+    int p;
+    s = aLex(archivo);
+    if (s.simbolo == IDENT) {
+      p = buscarIdent(s.cadena, tabla, base, (base + desplazamiento - 1));
+      if (p == -1) {
+        tabla[base + desplazamiento].tipo = PROCEDURE;
+        strcpy(tabla[base + desplazamiento].nombre, s.cadena);
+        tabla[base + desplazamiento].valor = 0;
+        desplazamiento++;
+      } else {
+        error(12, s);
+      }
+
+      s = aLex(archivo);
+    }
+    else
+      error(2, s);
+    if (s.simbolo = PTOCOMA)
+      s = aLex(archivo);
+    else
+      error(5, s);
+    s = bloque(s, archivo, tabla, base + desplazamiento);
+    if (s.simbolo == PTOCOMA)
+      s = aLex(archivo);
+    else
+      error(5, s);
+  }
+  s = proposicion(s, archivo, tabla, (base + desplazamiento - 1));
   return s;
 }
 
-tSimbolo proposicion(tSimbolo s, FILE *archivo) {
+tSimbolo proposicion(tSimbolo s, FILE *archivo, tablaDeIdent tabla, int posUltimoIdent) {
   switch (s.simbolo) {
   case IDENT:
     s = aLex(archivo);
@@ -512,7 +581,7 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo) {
       s = aLex(archivo);
     } else
       error(6, s); // Se esperaba asignacion
-    s = expresion(s, archivo);
+    s = expresion(s, archivo, tabla, posUltimoIdent);
     break;
   case CALL:
     s = aLex(archivo);
@@ -523,10 +592,10 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo) {
     break;
   case BEGIN:
     s = aLex(archivo);
-    s = proposicion(s, archivo);
+    s = proposicion(s, archivo, tabla, posUltimoIdent);
     while (s.simbolo == PTOCOMA) {
       s = aLex(archivo);
-      s = proposicion(s, archivo);
+      s = proposicion(s, archivo, tabla, posUltimoIdent);
     }
     if (s.simbolo == END)
       s = aLex(archivo);
@@ -535,30 +604,38 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo) {
     break;
   case IF:
     s = aLex(archivo);
-    s = condicion(s, archivo);
+    s = condicion(s, archivo, tabla, posUltimoIdent);
     if (s.simbolo == THEN)
       s = aLex(archivo);
     else
       error(8, s); // Se esperaba THEN
-    s = proposicion(s, archivo);
+    s = proposicion(s, archivo, tabla, posUltimoIdent);
     break;
   case WHILE:
     s = aLex(archivo);
-    s = condicion(s, archivo);
+    s = condicion(s, archivo, tabla, posUltimoIdent);
     if (s.simbolo == DO)
       s = aLex(archivo);
     else
       error(9, s); // Se esperaba DO
-    s = proposicion(s, archivo);
+    s = proposicion(s, archivo, tabla, posUltimoIdent);
     break;
   case READLN:
+    // int p;
     s = aLex(archivo);
     if (s.simbolo == ABREPAREN)
       s = aLex(archivo);
     else
       error(10, s); // Se esperaba ABREPAREN
-    if (s.simbolo == IDENT)
+    if (s.simbolo == IDENT) {
+      int p = buscarIdent(s.cadena, tabla, 0, posUltimoIdent);
+      if (p != -1) {
+        if (tabla[p].tipo != VAR) {
+          error(13, s);
+        }
+      }
       s = aLex(archivo);
+    }
     else
       error(2, s); // Se esperaba IDENT
     while (s.simbolo == COMA) {
@@ -582,15 +659,15 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo) {
     if (s.simbolo == CADENA)
       s = aLex(archivo);
     else
-      s = expresion(s, archivo);
+      s = expresion(s, archivo, tabla, posUltimoIdent);
     while (s.simbolo == COMA) {
       s = aLex(archivo);
       if (s.simbolo == CADENA)
         s = aLex(archivo);
       else
-        s = expresion(s, archivo);
+        s = expresion(s, archivo, tabla, posUltimoIdent);
     }
-    // else expresion(s, archivo);
+    // else expresion(s, archivo, posUltimoIdent);
     if (s.simbolo == CIERRAPAREN)
       s = aLex(archivo);
     else
@@ -604,30 +681,31 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo) {
       if (s.simbolo == CADENA)
         s = aLex(archivo);
       else
-        s = expresion(s, archivo);
+        s = expresion(s, archivo, tabla, posUltimoIdent);
       while (s.simbolo == COMA) {
         s = aLex(archivo);
         if (s.simbolo == CADENA)
           s = aLex(archivo);
         else
-          s = expresion(s, archivo);
+          s = expresion(s, archivo, tabla, posUltimoIdent);
       }
-      // else expresion(s, archivo);
+      // else expresion(s, archivo, posUltimoIdent);
       if (s.simbolo == CIERRAPAREN)
         s = aLex(archivo);
       else
         error(11, s); // Se esperaba CIERRAPAREN
-    }
+    } else
+      error(10, s);
   }
   return s;
 }
 
-tSimbolo condicion(tSimbolo s, FILE *archivo) {
+tSimbolo condicion(tSimbolo s, FILE *archivo, tablaDeIdent tabla, int posUltimoIdent) {
   if (s.simbolo == ODD) {
     s = aLex(archivo);
-    s = expresion(s, archivo);
+    s = expresion(s, archivo, tabla, posUltimoIdent);
   } else {
-    s = expresion(s, archivo);
+    s = expresion(s, archivo, tabla, posUltimoIdent);
     switch (s.simbolo) {
     case IGUAL:
       s = aLex(archivo);
@@ -654,29 +732,29 @@ tSimbolo condicion(tSimbolo s, FILE *archivo) {
   return s;
 }
 
-tSimbolo expresion(tSimbolo s, FILE *archivo) {
+tSimbolo expresion(tSimbolo s, FILE *archivo, tablaDeIdent tabla, int posUltimoIdent) {
   if (s.simbolo == MAS)
     s = aLex(archivo);
   else if (s.simbolo = MENOS)
     s = aLex(archivo);
-  s = termino(s, archivo);
+  s = termino(s, archivo, tabla, posUltimoIdent);
   while (s.simbolo == MAS || s.simbolo == MENOS) {
     s = aLex(archivo);
-    s = termino(s, archivo);
+    s = termino(s, archivo, tabla, posUltimoIdent);
   }
   return s;
 }
 
-tSimbolo termino(tSimbolo s, FILE *archivo) {
-  s = factor(s, archivo);
+tSimbolo termino(tSimbolo s, FILE *archivo, tablaDeIdent tabla, int posUltimoIdent) {
+  s = factor(s, archivo, tabla, posUltimoIdent);
   while (s.simbolo == POR || s.simbolo == DIVIDIDO) {
     aLex(archivo);
-    s = factor(s, archivo);
+    s = factor(s, archivo, tabla, posUltimoIdent);
   }
   return s;
 }
 
-tSimbolo factor(tSimbolo s, FILE *archivo) {
+tSimbolo factor(tSimbolo s, FILE *archivo, tablaDeIdent tabla, int posUltimoIdent) {
   switch (s.simbolo) {
   case IDENT:
     s = aLex(archivo);
@@ -686,7 +764,7 @@ tSimbolo factor(tSimbolo s, FILE *archivo) {
     break;
   case ABREPAREN:
     s = aLex(archivo);
-    s = expresion(s, archivo);
+    s = expresion(s, archivo, tabla, posUltimoIdent);
     if (s.simbolo == CIERRAPAREN)
       s = aLex(archivo);
     else
@@ -696,5 +774,13 @@ tSimbolo factor(tSimbolo s, FILE *archivo) {
   return s;
 }
 
-// Al terminar el switch de la funcion error, meter exit(0); para detener
-// ejecucion
+int buscarIdent(char * id, tablaDeIdent tabla, int posPrimerIdent, int posUltimoIdent) {
+  char cadenaAux[MAX_LONGITUD_CADENA + 3];
+  strcpy(cadenaAux, id);
+  uppercase(cadenaAux);
+  // SIEMPRE lee de abajo para arriba, para encontrar la ultima definicion de la variable
+  // o procedimiento
+  int i = posUltimoIdent;
+  while (i >= posPrimerIdent && strcmp(cadenaAux, tabla[i].nombre) != 0) i--;
+  return (i >= posPrimerIdent ? i : -1);
+}

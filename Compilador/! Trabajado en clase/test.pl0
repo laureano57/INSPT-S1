@@ -1,0 +1,14 @@
+CONST K = 1;
+VAR W;
+
+PROCEDURE M;
+    VAR K;
+    BEGIN
+        READLN(K);
+        W := K;
+    END;
+
+BEGIN
+    CALL M;
+    WRITELN(W+K);
+END.
