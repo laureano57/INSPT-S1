@@ -11,9 +11,8 @@
 #define MAX_CANT_IDENT 1024
 
 // #define ARCHIVO "ejemplo.pl0"
-// #define ARCHIVO "BIEN-00.PL0"
-#define ARCHIVO "test.pl0"
-
+#define ARCHIVO "BIEN-00.PL0"
+// #define ARCHIVO "test.pl0"
 
 // ############################### NUEVOS TIPOS ###############################
 
@@ -67,7 +66,6 @@ typedef struct {
 } tEntradaTabla;
 
 typedef tEntradaTabla tablaDeIdent[MAX_CANT_IDENT];
-
 
 // ###################### NUEVAS FUNCIONES (PROTOTIPOS) ######################
 
@@ -193,7 +191,8 @@ tSimbolo aLex(FILE *fp) {
     } else if (isdigit(c)) {
       do {
         c = getc(fp);
-        if (isdigit(c)) concatenar(a.cadena, c);
+        if (isdigit(c))
+          concatenar(a.cadena, c);
       } while (c != EOF && isdigit(c));
       // Corta cuando c==EOF o cuando c no es dígito
 
@@ -208,7 +207,8 @@ tSimbolo aLex(FILE *fp) {
       case '\'':
         do {
           c = getc(fp);
-          if (c != EOF && c != '\n') concatenar(a.cadena, c);
+          if (c != EOF && c != '\n')
+            concatenar(a.cadena, c);
         } while (c != EOF && c != '\n' && c != '\'');
         // Corta cuando c==EOF o c=='\n' o cuando c es un apóstrofo
 
@@ -544,7 +544,6 @@ tSimbolo bloque(tSimbolo s, FILE *archivo, tablaDeIdent tabla, int base) {
       error(5, s);
   }
 
-
   if (s.simbolo == VAR) {
     int p;
     s = aLex(archivo);
@@ -576,7 +575,6 @@ tSimbolo bloque(tSimbolo s, FILE *archivo, tablaDeIdent tabla, int base) {
       error(5, s);
   }
 
-
   while (s.simbolo == PROCEDURE) {
     int p;
     s = aLex(archivo);
@@ -604,7 +602,6 @@ tSimbolo bloque(tSimbolo s, FILE *archivo, tablaDeIdent tabla, int base) {
     else
       error(5, s);
   }
-
 
   s = proposicion(s, archivo, tabla, (base + desplazamiento - 1));
   return s;
@@ -766,6 +763,7 @@ tSimbolo condicion(tSimbolo s, FILE *archivo, tablaDeIdent tabla, int posUltimoI
       error(12, s); // Se esperaba un operador relacional
     }
   }
+  s = expresion(s, archivo, tabla, posUltimoIdent);
   return s;
 }
 
@@ -773,7 +771,7 @@ tSimbolo expresion(tSimbolo s, FILE *archivo, tablaDeIdent tabla, int posUltimoI
 
   if (s.simbolo == MAS)
     s = aLex(archivo);
-  else if (s.simbolo = MENOS)
+  else if (s.simbolo == MENOS)
     s = aLex(archivo);
   s = termino(s, archivo, tabla, posUltimoIdent);
   while (s.simbolo == MAS || s.simbolo == MENOS) {
@@ -787,7 +785,7 @@ tSimbolo termino(tSimbolo s, FILE *archivo, tablaDeIdent tabla, int posUltimoIde
 
   s = factor(s, archivo, tabla, posUltimoIdent);
   while (s.simbolo == POR || s.simbolo == DIVIDIDO) {
-    aLex(archivo);
+    s = aLex(archivo);
     s = factor(s, archivo, tabla, posUltimoIdent);
   }
   return s;
