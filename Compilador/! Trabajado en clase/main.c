@@ -97,6 +97,8 @@ void cargarByte(memoria **, byte);
 
 void cargarHeader(memoria **);
 
+void getNombre(char *, char **);
+
 // ################### Funciones del analizador sintactico ###################
 
 tSimbolo programa(tSimbolo, FILE *archivo);
@@ -122,8 +124,10 @@ int main(int argc, char *argv[]) {
   cargarHeader(&memArray);
 
   // Parseo nombre de archivo PL0 (para definir output filename)
-  char *outputFilename;
-  getNombre(argv[0], &outputFilename);
+  // Queda comentado hasta que se empiece a usar el ejecutable con un parametro,
+  // sino explota:
+  // char *outputFilename;
+  // getNombre(argv[0], &outputFilename);
 
   // if (argc != 2) {
   //     printf("Uso: lexer FUENTE.PL0\n");
@@ -874,4 +878,17 @@ void dumpToFile(memoria *mem) {
     fp = fopen(OUTPUT_FILE, "wb");
     fwrite(mem->bytesArray, sizeof(byte), mem->posicion, fp);
     fclose(fp);
+}
+
+void getNombre(char *arg, char **output) {
+    char *token;
+    int len = 0;
+    token = strtok(arg, ".");
+
+    while (token[len] != '\0') {
+        len++;
+    }
+
+    strcat(*output, token);
+    strcat(*output, ".exe");
 }
