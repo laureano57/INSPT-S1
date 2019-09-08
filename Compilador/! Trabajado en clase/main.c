@@ -93,7 +93,11 @@ void error(int codigo, tSimbolo s);
 
 int buscarIdent(char *, tablaDeIdent, int, int);
 
+// int esProcedure(char *, tEntradaTabla[], int);
+
 void cargarByte(memoria **, byte);
+
+void cargarInt(memoria **, int);
 
 void cargarHeader(memoria **);
 
@@ -181,7 +185,7 @@ tSimbolo aLex(FILE *fp) {
       // leerse en el próximo llamado a aLex
 
       char cadenaAux[MAX_LONGITUD_CADENA + 3];
-      // Más los apóstrofos y el cero final
+      // Más los apóstrofos y el \0 final
 
       strcpy(cadenaAux, a.cadena);
       uppercase(cadenaAux);
@@ -498,10 +502,16 @@ void error(int codigo, tSimbolo s) {
     printf("Error, se esperaba un CIERRAPAREN: %s\n", s.cadena);
     break;
   case 12:
-    printf("Error semantico, se repite el identificador(?): %s\n", s.cadena);
+    printf("Error semantico, se repite el identificador: %s\n", s.cadena);
     break;
   case 13:
     printf("Error semantico, se esperaba un VAR: %s\n", s.cadena);
+    break;
+    case 14:
+    printf("Error semantico, el identificador %s no esta declarado.\n", s.cadena);
+    break;
+  case 15:
+    printf("Error semantico, la proposicion %s no puede usar un tipo de identificador x\n", s.cadena);
     break;
   default:
     printf("Error generico\n");
@@ -532,6 +542,7 @@ tSimbolo bloque(tSimbolo s, FILE *archivo, tablaDeIdent tabla, int base) {
     s = aLex(archivo);
     if (s.simbolo == IDENT) {
       p = buscarIdent(s.cadena, tabla, base, (base + desplazamiento - 1));
+      // Si no encuentro el identificador en la tabla, lo agrego
       if (p == -1) {
         tabla[base + desplazamiento].tipo = CONST;
         strcpy(tabla[base + desplazamiento].nombre, s.cadena);
@@ -566,10 +577,11 @@ tSimbolo bloque(tSimbolo s, FILE *archivo, tablaDeIdent tabla, int base) {
       else
         error(4, s);
     }
-    if (s.simbolo == PTOCOMA)
+    if (s.simbolo == PTOCOMA){
       s = aLex(archivo);
-    else
+    } else {
       error(5, s);
+    }
   }
 
   if (s.simbolo == VAR) {
@@ -648,10 +660,15 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo, tablaDeIdent tabla, int posUltim
     break;
   case CALL:
     s = aLex(archivo);
-    if (s.simbolo == IDENT)
-      s = aLex(archivo);
-    else
+    if (s.simbolo == IDENT) {
+      if (esProcedure(s.cadena, tabla, posUltimoIdent) == 1) {
+        s = aLex(archivo);
+      } else {
+        error(15, s);
+      }
+    } else {
       error(2, s);
+    }
     break;
   case BEGIN:
     s = aLex(archivo);
@@ -854,11 +871,38 @@ int buscarIdent(char *id, tablaDeIdent tabla, int posPrimerIdent, int posUltimoI
   return (i >= posPrimerIdent ? i : -1);
 }
 
-// Carga un dato byte en el array de memoria e incrementa la posicion del indice
+// int esProcedure(char *cad, tablaDeIdent tabla, int posUltimoIdent) {
+//   for (int i = posUltimoIdent; i < MAX_CANT_IDENT; i++) {
+//     if ((strcmp(tabla[i].nombre, cad) == 0) && (tabla[i].tipo == PROCEDURE)) return 1;
+//   }
+
+//   return 0;
+// }
+
+// Carga un byte en el array de memoria e incrementa la posicion del indice
 void cargarByte(memoria **mem, byte dato) {
   int i = (*mem)->posicion;
   (*mem)->bytesArray[i] = dato;
   (*mem)->posicion += 1;
+}
+
+// Carga un int (4 bytes) en el array de memoria e incrementa la posicion del indice
+void cargarInt(memoria **mem, int dato) {
+  int i = (*mem)->posicion;
+  unsigned int k = 4294967295; // -1 en 4 bytes (FF FF FF FF)
+  unsigned int d;
+
+  if (dato < 0) {
+    d = k + dato + 1;
+  } else {
+    d = (unsigned int) dato;
+  }
+
+  // Como la PC es little endian, se insertan al reves, de a pares
+  cargarByte(mem, d % 0x100); // Ultimos 2 digitos
+  cargarByte(mem, d / 0x100 % 0x100); // los 2 siguientes
+  cargarByte(mem, d / 0x10000 % 0x100); // los 2 siguientes
+  cargarByte(mem, d / 0x1000000 % 0x100); // los 2 siguientes
 }
 
 // Carga los bytes del header al array de bytes
