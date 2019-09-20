@@ -28,7 +28,7 @@
 typedef unsigned char byte;
 
 typedef struct memoria {
-  int posicion;
+  int topeMemoria;
   byte * bytesArray;
 } memoria;
 
@@ -99,8 +99,6 @@ void error(int, tSimbolo);
 
 int buscarIdent(char *, tablaDeIdent, int, int);
 
-int esIdentDeTipo(char *, tablaDeIdent, int, tTerminal);
-
 void cargarByte(memoria **, byte);
 
 void cargarInt(memoria **, int);
@@ -131,7 +129,7 @@ int main(int argc, char *argv[]) {
 
   // Inicializo memArray para empezar a guardar bytes en bytesArray (array de salida)
   memoria *memArray = malloc(sizeof(memoria));
-  memArray->posicion = 0;
+  memArray->topeMemoria = 0;
   memArray->bytesArray = bytesArray;
 
   // Cargo el header y los bytes de entrada y salida al array de bytes
@@ -375,24 +373,16 @@ int buscarIdent(char *id, tablaDeIdent tabla, int posPrimerIdent, int posUltimoI
   return (i >= posPrimerIdent ? i : -1);
 }
 
-// Busca un identificador en la tabla, devuelve 1 si es del tipo buscado (PROCEDURE, CONST, VAR), caso contrario 0
-int esIdentDeTipo(char *cad, tablaDeIdent tabla, int posUltimoIdent, tTerminal tipo) {
-  for (int i = posUltimoIdent; i >= 0; i--) {
-    if ((strcmp(tabla[i].nombre, cad) == 0) && (tabla[i].tipo == tipo)) return 1;
-  }
-  return 0;
-}
-
 // Carga un byte en el array de memoria e incrementa la posicion del indice
 void cargarByte(memoria **mem, byte dato) {
-  int i = (*mem)->posicion;
+  int i = (*mem)->topeMemoria;
   (*mem)->bytesArray[i] = dato;
-  (*mem)->posicion += 1;
+  (*mem)->topeMemoria += 1;
 }
 
 // Carga un int (4 bytes) en el array de memoria e incrementa la posicion del indice
 void cargarInt(memoria **mem, int dato) {
-  int i = (*mem)->posicion;
+  int i = (*mem)->topeMemoria;
   unsigned int k = 4294967295; // -1 en 4 bytes (FF FF FF FF)
   unsigned int d;
 
@@ -434,9 +424,9 @@ void cargarIntEn(memoria **mem, int dato, int pos) {
 // Ni idea para que se usa, es para la parte final, donde se arreglan las posiciones de memoria
 int leerEnteroDe(memoria **mem, int pos) {
   return  (*mem)->bytesArray[pos] +
-          (*mem)->bytesArray[pos] * 256 +
-          (*mem)->bytesArray[pos] * 256 * 256 +
-          (*mem)->bytesArray[pos] * 256 * 256 * 256;
+          (*mem)->bytesArray[pos+1] * 256 +
+          (*mem)->bytesArray[pos+2] * 256 * 256 +
+          (*mem)->bytesArray[pos+3] * 256 * 256 * 256;
 }
 
 // Carga los bytes del header al array de bytes
@@ -454,7 +444,7 @@ void cargarHeader(memoria **mem) {
 void dumpToFile(memoria *mem) {
     FILE * fp;
     fp = fopen(OUTPUT_FILE, "wb");
-    fwrite(mem->bytesArray, sizeof(byte), mem->posicion, fp);
+    fwrite(mem->bytesArray, sizeof(byte), mem->topeMemoria, fp);
     fclose(fp);
 }
 
@@ -681,30 +671,8 @@ tSimbolo bloque(tSimbolo s, FILE *archivo, memoria **memArray, tablaDeIdent tabl
   // Agregar salto condicional al inicio de bloque, antes de todo (E9 00 00 00 00)
 
   if (s.simbolo == CONST) {
-    s = aLex(archivo);
-    if (s.simbolo == IDENT) {
-      p = buscarIdent(s.cadena, tabla, base, (base + desplazamiento - 1));
-      // Si no encuentro el identificador en la tabla, lo agrego
-      if (p == -1) {
-        tabla[base + desplazamiento].tipo = CONST;
-        strcpy(tabla[base + desplazamiento].nombre, s.cadena);
-      } else error(13, s);
+    do {
       s = aLex(archivo);
-    } else error(2, s);
-
-    if (s.simbolo == IGUAL) {
-      s = aLex(archivo);
-    } else error(3, s);
-
-    if (s.simbolo == NUMERO) {
-      tabla[base + desplazamiento].valor = atoi(s.cadena);
-      desplazamiento++;
-      s = aLex(archivo);
-    } else error(4, s);
-
-    while (s.simbolo == COMA) {
-      s = aLex(archivo);
-
       if (s.simbolo == IDENT) {
         p = buscarIdent(s.cadena, tabla, base, (base + desplazamiento - 1));
         // Si no encuentro el identificador en la tabla, lo agrego
@@ -722,47 +690,33 @@ tSimbolo bloque(tSimbolo s, FILE *archivo, memoria **memArray, tablaDeIdent tabl
       if (s.simbolo == NUMERO) {
         tabla[base + desplazamiento].valor = atoi(s.cadena);
         desplazamiento++;
-        s = aLex(archivo);
       } else error(4, s);
+      s = aLex(archivo);
+    } while (s.simbolo == COMA);
 
-    }
     if (s.simbolo == PTOCOMA){
       s = aLex(archivo);
     } else error(5, s);
   }
 
   if (s.simbolo == VAR) {
-    s = aLex(archivo);
-
-    if (s.simbolo == IDENT) {
-      p = buscarIdent(s.cadena, tabla, base, (base + desplazamiento - 1));
-      if (p == -1) {
-        tabla[base + desplazamiento].tipo = VAR;
-        strcpy(tabla[base + desplazamiento].nombre, s.cadena);
-        tabla[base + desplazamiento].valor = 0;
-        desplazamiento++;
-      } else error(13, s);
-      s = aLex(archivo);
-    } else error(2, s);
-
-    while (s.simbolo == COMA) {
+    do {
       s = aLex(archivo);
       if (s.simbolo == IDENT) {
         p = buscarIdent(s.cadena, tabla, base, (base + desplazamiento - 1));
         if (p == -1) {
           tabla[base + desplazamiento].tipo = VAR;
           strcpy(tabla[base + desplazamiento].nombre, s.cadena);
-          tabla[base + desplazamiento].valor = 0;
+          tabla[base + desplazamiento].valor = 0; // La dirección de memoria a que se refiere la variable (sólo el desplazamiento)
           desplazamiento++;
-        } else error(13, s);
-
-        s = aLex(archivo);
-      } else error(2, s);
-    }
+        } else error(13, s); // ya estaba
+      } else error(2, s); // no es ident
+      s = aLex(archivo);
+    } while (s.simbolo == COMA);
 
     if (s.simbolo == PTOCOMA)
       s = aLex(archivo);
-    else error(5, s);
+    else error(5, s); // noes punto y coma
   }
 
   while (s.simbolo == PROCEDURE) {
@@ -773,7 +727,7 @@ tSimbolo bloque(tSimbolo s, FILE *archivo, memoria **memArray, tablaDeIdent tabl
       if (p == -1) {
         tabla[base + desplazamiento].tipo = PROCEDURE;
         strcpy(tabla[base + desplazamiento].nombre, s.cadena);
-        tabla[base + desplazamiento].valor = 0;
+        tabla[base + desplazamiento].valor = 0; // La dirección de memoria donde comienza la proposición a ejecutar en el bloque
         desplazamiento++;
       } else error(13, s);
       s = aLex(archivo);
@@ -795,12 +749,17 @@ tSimbolo bloque(tSimbolo s, FILE *archivo, memoria **memArray, tablaDeIdent tabl
 }
 
 tSimbolo proposicion(tSimbolo s, FILE *archivo, memoria **memArray, tablaDeIdent tabla, int posUltimoIdent) {
+  int p;
 
   switch (s.simbolo) {
   case IDENT:
-    if (esIdentDeTipo(s.cadena, tabla, posUltimoIdent, VAR)) {
-      s = aLex(archivo);
-    } else error(17, s); // Error semantico, se esperaba un VAR
+    p = buscarIdent(s.cadena, tabla, 0, posUltimoIdent);
+    if (p != -1) {
+      if (tabla[p].tipo == VAR) {
+        s = aLex(archivo);
+      } else error(17, s); // Error semantico, se esperaba un VAR
+    } else error(15, s); // identificador no encontrado
+
     if (s.simbolo == ASIGNACION) {
       s = aLex(archivo);
     } else error(6, s); // Error sintactico, se esperaba asignacion
@@ -809,10 +768,13 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo, memoria **memArray, tablaDeIdent
   case CALL:
     s = aLex(archivo);
     if (s.simbolo == IDENT) {
-      if (esIdentDeTipo(s.cadena, tabla, posUltimoIdent, PROCEDURE)) {
-        s = aLex(archivo);
-      } else error(16, s); // Error semantico, se esparaba un PROCEDURE
-    } else error(2, s);
+      p = buscarIdent(s.cadena, tabla, 0, posUltimoIdent);
+      if (p != -1) {
+        if (tabla[p].tipo == PROCEDURE) {
+          s = aLex(archivo);
+        } else error(16, s); // Error semantico, se esperaba un PROCEDURE
+      } else error(15, s); // identificador no encontrado
+    } else error(2, s); // Se esperaba un ident
     break;
   case BEGIN:
     s = aLex(archivo);
@@ -845,40 +807,28 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo, memoria **memArray, tablaDeIdent
     s = proposicion(s, archivo, memArray, tabla, posUltimoIdent);
     break;
   case READLN:
-    // int p;
     s = aLex(archivo);
-    if (s.simbolo == ABREPAREN)
+    if (s.simbolo != ABREPAREN) error(10, s); // Se esperaba ABREPAREN
+
+    do {
       s = aLex(archivo);
-    else
-      error(10, s); // Se esperaba ABREPAREN
-    if (s.simbolo == IDENT) {
+      if (s.simbolo != IDENT) error(2, s); // Se esperaba IDENT
       int p = buscarIdent(s.cadena, tabla, 0, posUltimoIdent);
-      if (p != -1) {
-        if (tabla[p].tipo != VAR) {
-          error(14, s);
-        }
-      }
+      if (p == -1) error(15, s); // no se encontro el IDENT en la tabla
+      if (tabla[p].tipo != VAR) error(14, s); // Se esperaba un VAR
       s = aLex(archivo);
-    } else
-      error(2, s); // Se esperaba IDENT
-    while (s.simbolo == COMA) {
-      s = aLex(archivo);
-      if (s.simbolo == IDENT)
-        s = aLex(archivo);
-      else
-        error(2, s); // Se esperaba IDENT
-    }
-    if (s.simbolo == CIERRAPAREN)
-      s = aLex(archivo);
-    else
-      error(11, s); // Se esperaba CIERRAPAREN
+    } while (s.simbolo == COMA);
+
+    if (s.simbolo != CIERRAPAREN) error(11, s); // Se esperaba CIERRAPAREN
+
+    s = aLex(archivo);
     break;
   case WRITE:
     s = aLex(archivo);
-    if (s.simbolo == ABREPAREN)
-      s = aLex(archivo);
-    else
-      error(10, s);
+
+    if (s.simbolo != ABREPAREN) error(10, s);
+    s = aLex(archivo);
+
     if (s.simbolo == CADENA)
       s = aLex(archivo);
     else
@@ -982,11 +932,15 @@ tSimbolo termino(tSimbolo s, FILE *archivo, memoria **memArray, tablaDeIdent tab
 }
 
 tSimbolo factor(tSimbolo s, FILE *archivo, memoria **memArray, tablaDeIdent tabla, int posUltimoIdent) {
+  int p;
   switch (s.simbolo) {
   case IDENT:
-    if (!esIdentDeTipo(s.cadena, tabla, posUltimoIdent, PROCEDURE)) {
-      s = aLex(archivo);
-    } else error(18, s);
+    p = buscarIdent(s.cadena, tabla, 0, posUltimoIdent);
+    if (p != -1) {
+      if (tabla[p].tipo != PROCEDURE) {
+        s = aLex(archivo);
+      } else error(18, s); // Error semantico, se esperaba un VAR o CONST
+    } else error(15, s); // identificador no encontrado
     break;
   case NUMERO:
     s = aLex(archivo);
@@ -1003,28 +957,51 @@ tSimbolo factor(tSimbolo s, FILE *archivo, memoria **memArray, tablaDeIdent tabl
   return s;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
 /**
   Analizador Semantico
+    En BLOQUE:
+    - Carga a la tabla todos los identificadores
 
-  En BLOQUE:
-  - Carga a la tabla todos los identificadores
+    En PROPOSICION:
+    - En asignacion debe validar que el identificador sea de tipo VAR, sino devuelve "Error, se esperaba una asignacion a un VAR"
+    - En CALL debe validar que el identificador sea de tipo PROCEDURE, sino devuelve "Error, se esperaba un procedure"
 
-  En PROPOSICION:
-  - En asignacion debe validar que el identificador sea de tipo VAR, sino devuelve "Error, se esperaba una asignacion a un VAR"
-  - En CALL debe validar que el identificador sea de tipo PROCEDURE, sino devuelve "Error, se esperaba un procedure"
+    En FACTOR:
+    - Debe validar que el identificador no sea de tipo PROCEDURE, sino devuelve "Error, se esperaba un numero entero"
 
-  En FACTOR:
-  - Debe validar que el identificador no sea de tipo PROCEDURE, sino devuelve "Error, se esperaba un numero entero"
+  HACER:
+    - En proposicion, analisis semantico, en la parte de VAR y PROCEDURE, hay que cargar en la tabla el valor que
+    corresponde a cada uno. El valor que se guarda en cada uno esta dado por el criterio siguiente (del pdf):
+        variable: la dirección de memoria a que se refiere la variable (sólo el desplazamiento)
+        procedimiento: la dirección de memoria donde comienza la proposición a ejecutar en el bloque
+    - Supuestamente en VAR, por cada variable que se declara tenemos que reservar 4 bytes de espacio, con lo cual
+    es necesario crear una variable local en programa() y pasarsela a las funciones para que vayan contando la cantidad
+    de variables que se declaran (se va incrementando el valor de esta variable y se va asignando el valor de esta
+    variable a el valor de la tabla de los identificadores VAR)
+**/
+
+/**
+  EBNF PL/0 GRAMMAR
+    program = block "." .
+    block = const-declaration  var-declaration  procedure-declaration  statement .
+    const-declaration = [“const” ident “=” number {“,” ident “=” number} “;”] .
+    var-declaration = [“var” ident {“,” ident} “;” ] .
+    procedure-declaration = {“procedure” ident “;” block “;”} .
+    statement = [ ident ":=" expression
+                          | "call" ident
+                          | "begin" statement {";" statement } "end"
+                          | "if" condition "then" statement
+                          | "while" condition "do" statement
+                          | "read" ident
+                          | "write" ident] .
+    condition = "odd" expression
+                          | expression rel-op expression .
+    rel-op = "="|"<>"|"<"|"<="|">"|">=" .
+    expression = [ "+"|"-"] term { ("+"|"-") term} .
+    term = factor { ("*" | "/") factor} .
+    factor = ident | number | "(" expression ")" .
+    number = digit {digit} .
+    ident = letter {letter | digit} .
+    digit = "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9" .
+    letter = "a"|"b"|"c"|... |"x"|"y"|"z" .
 **/
