@@ -15,7 +15,7 @@
 #define MAX_CANT_IDENT 1024
 
 // Archivo de test harcodeado
-#define ARCHIVO "BIEN-00.PL0"
+#define ARCHIVO "test.pl0"
 
 // Salida binaria del compilador
 #define OUTPUT_FILE "output.bin"
@@ -365,11 +365,10 @@ int buscarIdent(char *id, tablaDeIdent tabla, int posPrimerIdent, int posUltimoI
   char cadenaAux[MAX_LONGITUD_CADENA + 3];
   strcpy(cadenaAux, id);
   uppercase(cadenaAux);
-  // SIEMPRE lee de abajo para arriba, para encontrar la ultima definicion de la
-  // variable o procedimiento
+
+  // SIEMPRE lee de abajo para arriba, para encontrar la ultima definicion de la variable o procedimiento
   int i = posUltimoIdent;
-  while (i >= posPrimerIdent && strcmp(cadenaAux, tabla[i].nombre) != 0)
-    i--;
+  while (i >= posPrimerIdent && strcmp(cadenaAux, tabla[i].nombre) != 0) i--;
   return (i >= posPrimerIdent ? i : -1);
 }
 
@@ -657,10 +656,9 @@ tSimbolo programa(tSimbolo s, FILE *archivo, memoria **memArray) {
   // Aca hay que cargar MOV, EDI ...., después de haber generado el header y E/S
 
   s = bloque(s, archivo, memArray, tabla, 0);
-  if (s.simbolo == PUNTO)
-    s = aLex(archivo);
-  else
-    error(1, s);
+  if (s.simbolo != PUNTO) error(1, s); // Se esperaba un PUNTO
+  s = aLex(archivo);
+
   return s;
 }
 
@@ -673,75 +671,72 @@ tSimbolo bloque(tSimbolo s, FILE *archivo, memoria **memArray, tablaDeIdent tabl
   if (s.simbolo == CONST) {
     do {
       s = aLex(archivo);
-      if (s.simbolo == IDENT) {
-        p = buscarIdent(s.cadena, tabla, base, (base + desplazamiento - 1));
-        // Si no encuentro el identificador en la tabla, lo agrego
-        if (p == -1) {
-          tabla[base + desplazamiento].tipo = CONST;
-          strcpy(tabla[base + desplazamiento].nombre, s.cadena);
-        } else error(13, s);
-        s = aLex(archivo);
-      } else error(2, s);
+      if (s.simbolo != IDENT) error(2, s); // Se esperaba un IDENT
+      p = buscarIdent(s.cadena, tabla, base, (base + desplazamiento - 1));
 
-      if (s.simbolo == IGUAL) {
-        s = aLex(archivo);
-      } else error(3, s);
+      // Si no encuentro el identificador en la tabla, lo agrego
+      if (p != -1) error(13, s); // El ident ya estaba declarado
+      tabla[base + desplazamiento].tipo = CONST;
+      strcpy(tabla[base + desplazamiento].nombre, s.cadena);
 
-      if (s.simbolo == NUMERO) {
-        tabla[base + desplazamiento].valor = atoi(s.cadena);
-        desplazamiento++;
-      } else error(4, s);
+      s = aLex(archivo);
+      if (s.simbolo != IGUAL) error(3, s); // Se esperaba un IGUAL
+
+      s = aLex(archivo);
+      if (s.simbolo != NUMERO) error(4, s); // Se esperaba un NUMERO
+      tabla[base + desplazamiento].valor = atoi(s.cadena);
+      desplazamiento++;
+
       s = aLex(archivo);
     } while (s.simbolo == COMA);
 
-    if (s.simbolo == PTOCOMA){
-      s = aLex(archivo);
-    } else error(5, s);
+    if (s.simbolo != PTOCOMA) error(5, s); // Se esperaba PTOCOMA
+    s = aLex(archivo);
   }
 
   if (s.simbolo == VAR) {
     do {
       s = aLex(archivo);
-      if (s.simbolo == IDENT) {
-        p = buscarIdent(s.cadena, tabla, base, (base + desplazamiento - 1));
-        if (p == -1) {
-          tabla[base + desplazamiento].tipo = VAR;
-          strcpy(tabla[base + desplazamiento].nombre, s.cadena);
-          tabla[base + desplazamiento].valor = 0; // La dirección de memoria a que se refiere la variable (sólo el desplazamiento)
-          desplazamiento++;
-        } else error(13, s); // ya estaba
-      } else error(2, s); // no es ident
+      if (s.simbolo != IDENT) error(2, s); // Se esperaba un IDENT
+
+      p = buscarIdent(s.cadena, tabla, base, (base + desplazamiento - 1));
+      if (p != -1) error(13, s); // Ya estaba declarado en la tabla
+
+      tabla[base + desplazamiento].tipo = VAR;
+      strcpy(tabla[base + desplazamiento].nombre, s.cadena);
+      tabla[base + desplazamiento].valor = 0; // La dirección de memoria a que se refiere la variable (sólo el desplazamiento)
+      desplazamiento++;
+
       s = aLex(archivo);
     } while (s.simbolo == COMA);
 
-    if (s.simbolo == PTOCOMA)
-      s = aLex(archivo);
-    else error(5, s); // noes punto y coma
+    if (s.simbolo != PTOCOMA) error(5, s); // Se esperaba punto y coma
+    s = aLex(archivo);
   }
 
   while (s.simbolo == PROCEDURE) {
     s = aLex(archivo);
 
-    if (s.simbolo == IDENT) {
-      p = buscarIdent(s.cadena, tabla, base, (base + desplazamiento - 1));
-      if (p == -1) {
-        tabla[base + desplazamiento].tipo = PROCEDURE;
-        strcpy(tabla[base + desplazamiento].nombre, s.cadena);
-        tabla[base + desplazamiento].valor = 0; // La dirección de memoria donde comienza la proposición a ejecutar en el bloque
-        desplazamiento++;
-      } else error(13, s);
-      s = aLex(archivo);
-    } else error(2, s);
+    if (s.simbolo != IDENT) error(2, s); // Se esperaba un IDENT
 
-    if (s.simbolo = PTOCOMA) {
-      s = aLex(archivo);
-    } else error(5, s);
+    p = buscarIdent(s.cadena, tabla, base, (base + desplazamiento - 1));
+    if (p != -1) error(13, s); // El identificador ya estaba declarado
+
+    tabla[base + desplazamiento].tipo = PROCEDURE;
+    strcpy(tabla[base + desplazamiento].nombre, s.cadena);
+    tabla[base + desplazamiento].valor = 0; // La dirección de memoria donde comienza la proposición a ejecutar en el bloque
+    desplazamiento++;
+
+    s = aLex(archivo);
+
+    if (s.simbolo != PTOCOMA) error(5, s); // Se esperaba PTOCOMA
+
+    s = aLex(archivo);
 
     s = bloque(s, archivo, memArray, tabla, base + desplazamiento);
     // Debería insertar una instruccion C3 RET (El final del bloque)
-    if (s.simbolo == PTOCOMA) {
-      s = aLex(archivo);
-    } else error(5, s);
+    if (s.simbolo != PTOCOMA) error(5, s); // Se esperaba PTOCOMA
+    s = aLex(archivo);
   }
 
   s = proposicion(s, archivo, memArray, tabla, (base + desplazamiento - 1));
@@ -750,125 +745,112 @@ tSimbolo bloque(tSimbolo s, FILE *archivo, memoria **memArray, tablaDeIdent tabl
 
 tSimbolo proposicion(tSimbolo s, FILE *archivo, memoria **memArray, tablaDeIdent tabla, int posUltimoIdent) {
   int p;
-
   switch (s.simbolo) {
-  case IDENT:
-    p = buscarIdent(s.cadena, tabla, 0, posUltimoIdent);
-    if (p != -1) {
-      if (tabla[p].tipo == VAR) {
-        s = aLex(archivo);
-      } else error(17, s); // Error semantico, se esperaba un VAR
-    } else error(15, s); // identificador no encontrado
 
-    if (s.simbolo == ASIGNACION) {
-      s = aLex(archivo);
-    } else error(6, s); // Error sintactico, se esperaba asignacion
-    s = expresion(s, archivo, memArray, tabla, posUltimoIdent);
-    break;
-  case CALL:
-    s = aLex(archivo);
-    if (s.simbolo == IDENT) {
+    case IDENT:
       p = buscarIdent(s.cadena, tabla, 0, posUltimoIdent);
-      if (p != -1) {
-        if (tabla[p].tipo == PROCEDURE) {
-          s = aLex(archivo);
-        } else error(16, s); // Error semantico, se esperaba un PROCEDURE
-      } else error(15, s); // identificador no encontrado
-    } else error(2, s); // Se esperaba un ident
-    break;
-  case BEGIN:
-    s = aLex(archivo);
-    s = proposicion(s, archivo, memArray, tabla, posUltimoIdent);
-    while (s.simbolo == PTOCOMA) {
+      if (p == -1) error(15, s); // identificador no encontrado
+      if (tabla[p].tipo != VAR) error(17, s); // Error semantico, se esperaba un VAR
+      s = aLex(archivo);
+      if (s.simbolo != ASIGNACION) error(6, s); // Error sintactico, se esperaba asignacion
+      s = aLex(archivo);
+      s = expresion(s, archivo, memArray, tabla, posUltimoIdent);
+      break;
+
+    case CALL:
+      s = aLex(archivo);
+      if (s.simbolo != IDENT) error(2, s); // Se esperaba un ident
+      p = buscarIdent(s.cadena, tabla, 0, posUltimoIdent);
+      if (p == -1) error(15, s); // identificador no encontrado
+      if (tabla[p].tipo != PROCEDURE) error(16, s); // Error semantico, se esperaba un PROCEDURE
+      s = aLex(archivo);
+      break;
+
+    case BEGIN:
       s = aLex(archivo);
       s = proposicion(s, archivo, memArray, tabla, posUltimoIdent);
-    }
-    if (s.simbolo == END)
-      s = aLex(archivo);
-    else
-      error(7, s); // Se esperaba END
-    break;
-  case IF:
-    s = aLex(archivo);
-    s = condicion(s, archivo, memArray, tabla, posUltimoIdent);
-    if (s.simbolo == THEN)
-      s = aLex(archivo);
-    else
-      error(8, s); // Se esperaba THEN
-    s = proposicion(s, archivo, memArray, tabla, posUltimoIdent);
-    break;
-  case WHILE:
-    s = aLex(archivo);
-    s = condicion(s, archivo, memArray, tabla, posUltimoIdent);
-    if (s.simbolo == DO)
-      s = aLex(archivo);
-    else
-      error(9, s); // Se esperaba DO
-    s = proposicion(s, archivo, memArray, tabla, posUltimoIdent);
-    break;
-  case READLN:
-    s = aLex(archivo);
-    if (s.simbolo != ABREPAREN) error(10, s); // Se esperaba ABREPAREN
-
-    do {
-      s = aLex(archivo);
-      if (s.simbolo != IDENT) error(2, s); // Se esperaba IDENT
-      int p = buscarIdent(s.cadena, tabla, 0, posUltimoIdent);
-      if (p == -1) error(15, s); // no se encontro el IDENT en la tabla
-      if (tabla[p].tipo != VAR) error(14, s); // Se esperaba un VAR
-      s = aLex(archivo);
-    } while (s.simbolo == COMA);
-
-    if (s.simbolo != CIERRAPAREN) error(11, s); // Se esperaba CIERRAPAREN
-
-    s = aLex(archivo);
-    break;
-  case WRITE:
-    s = aLex(archivo);
-
-    if (s.simbolo != ABREPAREN) error(10, s);
-    s = aLex(archivo);
-
-    if (s.simbolo == CADENA)
-      s = aLex(archivo);
-    else
-      s = expresion(s, archivo, memArray, tabla, posUltimoIdent);
-    while (s.simbolo == COMA) {
-      s = aLex(archivo);
-      if (s.simbolo == CADENA)
+      while (s.simbolo == PTOCOMA) {
         s = aLex(archivo);
-      else
-        s = expresion(s, archivo, memArray, tabla, posUltimoIdent);
-    }
-    // else expresion(s, archivo, posUltimoIdent);
-    if (s.simbolo == CIERRAPAREN)
+        s = proposicion(s, archivo, memArray, tabla, posUltimoIdent);
+      }
+      if (s.simbolo != END) error(7, s); // Se esperaba END
       s = aLex(archivo);
-    else
-      error(11, s); // Se esperaba CIERRAPAREN
-    break;
-  case WRITELN:
-    // probar esto, medio dudoso y mal explicado
-    s = aLex(archivo);
-    if (s.simbolo == PTOCOMA) return s;
-    if (s.simbolo == ABREPAREN) {
+      break;
+
+    case IF:
       s = aLex(archivo);
+      s = condicion(s, archivo, memArray, tabla, posUltimoIdent);
+      if (s.simbolo != THEN) error(8, s); // Se esperaba THEN
+      s = aLex(archivo);
+      s = proposicion(s, archivo, memArray, tabla, posUltimoIdent);
+      break;
+
+    case WHILE:
+      s = aLex(archivo);
+      s = condicion(s, archivo, memArray, tabla, posUltimoIdent);
+      if (s.simbolo != DO) error(9, s); // Se esperaba DO
+      s = aLex(archivo);
+      s = proposicion(s, archivo, memArray, tabla, posUltimoIdent);
+      break;
+
+    case READLN:
+      s = aLex(archivo);
+      if (s.simbolo != ABREPAREN) error(10, s); // Se esperaba ABREPAREN
+
+      do {
+        s = aLex(archivo);
+        if (s.simbolo != IDENT) error(2, s); // Se esperaba IDENT
+        int p = buscarIdent(s.cadena, tabla, 0, posUltimoIdent);
+        if (p == -1) error(15, s); // no se encontro el IDENT en la tabla
+        if (tabla[p].tipo != VAR) error(14, s); // Se esperaba un VAR
+        s = aLex(archivo);
+      } while (s.simbolo == COMA);
+
+      if (s.simbolo != CIERRAPAREN) error(11, s); // Se esperaba CIERRAPAREN
+
+      s = aLex(archivo);
+      break;
+
+    case WRITE:
+      s = aLex(archivo);
+
+      if (s.simbolo != ABREPAREN) error(10, s);
+      s = aLex(archivo);
+
       if (s.simbolo == CADENA) {
         s = aLex(archivo);
       } else {
         s = expresion(s, archivo, memArray, tabla, posUltimoIdent);
       }
+
       while (s.simbolo == COMA) {
+        s = aLex(archivo);
+        if (s.simbolo == CADENA)
+          s = aLex(archivo);
+        else
+          s = expresion(s, archivo, memArray, tabla, posUltimoIdent);
+      }
+
+      if (s.simbolo != CIERRAPAREN) error(11, s); // Se esperaba CIERRAPAREN
+      s = aLex(archivo);
+      break;
+
+    case WRITELN:
+      s = aLex(archivo);
+      if (s.simbolo == PTOCOMA) return s; // Si se lo invoca sin parametros, es un salto de linea nomas
+      if (s.simbolo != ABREPAREN) error(10, s); // Se esperaba ABREPAREN
+
+      do {
         s = aLex(archivo);
         if (s.simbolo == CADENA) {
           s = aLex(archivo);
         } else {
           s = expresion(s, archivo, memArray, tabla, posUltimoIdent);
         }
-      }
-      if (s.simbolo == CIERRAPAREN) {
-        s = aLex(archivo);
-      } else error(11, s); // Se esperaba CIERRAPAREN
-    } else error(10, s);
+      } while (s.simbolo == COMA);
+
+      if (s.simbolo != CIERRAPAREN) error(11, s); // Se esperaba CIERRAPAREN
+      s = aLex(archivo);
   }
   return s;
 }
@@ -922,7 +904,6 @@ tSimbolo expresion(tSimbolo s, FILE *archivo, memoria **memArray, tablaDeIdent t
 }
 
 tSimbolo termino(tSimbolo s, FILE *archivo, memoria **memArray, tablaDeIdent tabla, int posUltimoIdent) {
-
   s = factor(s, archivo, memArray, tabla, posUltimoIdent);
   while (s.simbolo == POR || s.simbolo == DIVIDIDO) {
     s = aLex(archivo);
@@ -936,11 +917,9 @@ tSimbolo factor(tSimbolo s, FILE *archivo, memoria **memArray, tablaDeIdent tabl
   switch (s.simbolo) {
   case IDENT:
     p = buscarIdent(s.cadena, tabla, 0, posUltimoIdent);
-    if (p != -1) {
-      if (tabla[p].tipo != PROCEDURE) {
-        s = aLex(archivo);
-      } else error(18, s); // Error semantico, se esperaba un VAR o CONST
-    } else error(15, s); // identificador no encontrado
+    if (p == -1) error(15, s); // identificador no encontrado
+    if (tabla[p].tipo == PROCEDURE) error(18, s); // Error semantico, se esperaba un VAR o CONST
+    s = aLex(archivo);
     break;
   case NUMERO:
     s = aLex(archivo);
@@ -948,10 +927,8 @@ tSimbolo factor(tSimbolo s, FILE *archivo, memoria **memArray, tablaDeIdent tabl
   case ABREPAREN:
     s = aLex(archivo);
     s = expresion(s, archivo, memArray, tabla, posUltimoIdent);
-    if (s.simbolo == CIERRAPAREN)
-      s = aLex(archivo);
-    else
-      error(11, s); // Se esperaba CIERRAPAREN
+    if (s.simbolo != CIERRAPAREN) error(11, s); // Se esperaba CIERRAPAREN
+    s = aLex(archivo);
     break;
   }
   return s;
