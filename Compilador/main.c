@@ -1,5 +1,4 @@
-// Para usar isgraph
-#include <ctype.h>
+#include <ctype.h> // Para usar isgraph
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -93,6 +92,8 @@ void imprimir(tSimbolo);
 
 void concatenar(char *, char);
 
+void stringPointerCopy(char *, const char *);
+
 void uppercase(char *);
 
 void error(int, tSimbolo);
@@ -111,9 +112,9 @@ int leerIntDe(memStruct *, int);
 
 void cargarHeader(memStruct *);
 
-void dumpToFile(memStruct *);
+void dumpToFile(memStruct *, char *);
 
-void getNombre(char *, char **);
+void getOutputFilename(char *, char **);
 
 // ####################################################################################################################
 // ####################################### Funciones del analizador sintactico #######################################
@@ -135,41 +136,38 @@ int main(int argc, char *argv[]) {
   // Array de bytes donde se van a ir volcando los datos
   byte bytesArray[8192];
 
+  // Puntero al nombre del compilado de salida
+  char *outputFilename = malloc(sizeof(char) * 32);
+
   // Inicializo memoria para empezar a guardar bytes en bytesArray (array de salida)
   memStruct *memoria = malloc(sizeof(memStruct));
   memoria->topeMemoria = 0;
   memoria->bytesArray = bytesArray;
 
-  // Cargo el header y los bytes de entrada y salida al array de bytes
+  // Cargo el header y los bytes de entrada y salida al array de bytes de memoria
   cargarHeader(memoria);
-  printf("mem 204: %d", memoria->bytesArray[204]);
-  // Escribe bytes a la salida
-  // dumpToFile(memoria);
 
-  // Parseo nombre de archivo PL0 (para definir output filename)
-  // Queda comentado hasta que se empiece a usar el ejecutable con un parametro,
-  // sino explota:
-  // char *outputFilename;
-  // getNombre(argv[0], &outputFilename);
-
-  // if (argc != 2) {
-  //     printf("Uso: lexer FUENTE.PL0\n");
-  // } else {
-  FILE *archivo;
-  // archivo = fopen(argv[1], "r");
-  archivo = fopen(ARCHIVO, "r"); // Harcodea nombre de archivo
-  if (archivo == NULL) {
-    printf("Error de apertura del archivo [%s].\n", argv[1]);
+  if (argc != 2) {
+      printf("No se ingreso ningun archivo por parametro, saliendo...\n");
   } else {
-    tSimbolo s;
-    s = aLex(archivo);
-    s = programa(s, archivo, memoria);
-    dumpToFile(memoria);                                          // Vuelca array de memoria en archivo
-    if (s.simbolo == FIN_DE_ARCHIVO) {
-      printf("Archivo procesado exitosamente\n");
-    } else error(0, s);
+    FILE *archivo;
+    archivo = fopen(argv[1], "r");
 
-  // }
+    if (archivo == NULL) {
+      printf("Error de apertura del archivo [%s].\n", argv[1]);
+    } else {
+      tSimbolo s;
+      s = aLex(archivo);
+      s = programa(s, archivo, memoria);
+      if (s.simbolo != FIN_DE_ARCHIVO) error(0, s);
+
+      printf("Archivo procesado exitosamente\n");
+
+      // Vuelca array de memoria en archivo
+      getOutputFilename(argv[1], &outputFilename);
+      printf("\nArchivo generado: %s\n", outputFilename);
+      dumpToFile(memoria, outputFilename);
+    }
   }
   return 0;
 }
@@ -291,11 +289,15 @@ void imprimir(tSimbolo simb) {
 }
 
 void concatenar(char *s, char c) {
-  if (strlen(s) < MAX_LONGITUD_CADENA + 2) { // Si cabe uno mas
+  if (strlen(s) < MAX_LONGITUD_CADENA + 2) {
     for (; *s; s++);
     *s++ = c;
     *s++ = '\0';
   }
+}
+
+void stringPointerCopy(char *dest, const char *src) {
+  while (*dest++ = *src++);
 }
 
 void uppercase(char *s) {
@@ -350,7 +352,7 @@ void error(int codigo, tSimbolo s) {
   case 14:
     printf("Error semantico, se esperaba un VAR: %s\n", s.cadena);
     break;
-    case 15:
+  case 15:
     printf("Error semantico, el identificador %s no esta declarado.\n", s.cadena);
     break;
   case 16:
@@ -460,25 +462,21 @@ void cargarHeader(memStruct *memoria) {
 }
 
 // Escribe archivo binario con el contenido del array de bytes
-void dumpToFile(memStruct *memoria) {
-    FILE * fp;
-    fp = fopen(OUTPUT_FILE, "wb");
-    fwrite(memoria->bytesArray, sizeof(byte), memoria->topeMemoria, fp);
-    fclose(fp);
+void dumpToFile(memStruct *memoria, char *nombreArchivo) {
+  FILE * fp;
+  fp = fopen(nombreArchivo, "wb");
+  fwrite(memoria->bytesArray, sizeof(byte), memoria->topeMemoria, fp);
+  fclose(fp);
 }
 
 // Devuelve nombre de archivo ejecutable
-void getNombre(char *arg, char **output) {
-    char *token;
-    int len = 0;
-    token = strtok(arg, ".");
-
-    while (token[len] != '\0') {
-        len++;
-    }
-
-    strcat(*output, token);
-    strcat(*output, ".exe");
+void getOutputFilename(char *arg, char **output) {
+  char *token, *filename;
+  filename = malloc(sizeof(char) * 32);
+  stringPointerCopy(filename, arg);
+  token = strtok(filename, ".");
+  strcpy(*output, token);
+  strcat(*output, ".exe");
 }
 // ####################################################################################################################
 // ################################################ Analizador Lexico #################################################
@@ -909,7 +907,7 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent
         s = aLex(archivo);
 
         cargarByte(memoria, 0xE8);                                  // CALL dir
-        int distanciaReadln = 0x590 - (memoria->topeMemoria + 5);   // (distancia)
+        int distanciaReadln = 0x590 - (memoria->topeMemoria + 4);   // (distancia)
         cargarInt(memoria, distanciaReadln);                        // ...
         cargarByte(memoria, 0x89);                                  // MOV [EDI + ....], EAX
         cargarByte(memoria, 0x87);                                  // ...
@@ -951,10 +949,6 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent
         }
       } while (s.simbolo == COMA);
 
-      // Finaliza enviando un salto de linea
-      // cargarByte(memoria, 0xE8);                                    // CALL
-      // cargarInt(memoria, 0x410 - (memoria->topeMemoria + 4));       // Salto de linea
-
       if (s.simbolo != CIERRAPAREN) error(11, s);                   // Se esperaba CIERRAPAREN
       s = aLex(archivo);
       break;
@@ -979,8 +973,7 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent
           cargarByte(memoria, 0xB8);                                // MOV EAX, ....
           cargarInt(memoria, posCadena);                            // Ubicacion absoluta de la cadena
           cargarByte(memoria, 0xE8);                                // CALL dir
-          cargarInt(memoria, 0x3E0 - memoria->topeMemoria + 4);     // Rutina de impresion por pantalla
-          // Según Corsi, la distancia de este salto es (0x3E0 - (topeMemoria + 5))
+          cargarInt(memoria, 0x3E0 - memoria->topeMemoria - 4);     // Rutina de impresion por pantalla
           cargarByte(memoria, 0xE9);                                // JMP ....
           cargarInt(memoria, sizeCadena - 1);
           for (int i = 1; i < (sizeCadena - 1); i++) cargarByte(memoria, s.cadena[i]);
@@ -1011,7 +1004,7 @@ tSimbolo condicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent t
     s = aLex(archivo);
     s = expresion(s, archivo, memoria, tabla, posUltimoIdent);
 
-    cargarByte(memoria, 0x58);                                      // POP EAX
+    cargarPopEax(memoria);                                          // POP EAX
     cargarByte(memoria, 0xA8);                                      // TEST AL, ab
     cargarByte(memoria, 0x01);                                      // ... (ab)
     cargarByte(memoria, 0x7B);                                      // JPO ab     => Jump if parity odd
@@ -1020,7 +1013,7 @@ tSimbolo condicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent t
   } else {
     s = expresion(s, archivo, memoria, tabla, posUltimoIdent);
 
-    cargarByte(memoria, 0x58);                                      // POP EAX
+    cargarPopEax(memoria);                                          // POP EAX
     cargarByte(memoria, 0x5B);                                      // POP EBX
     cargarByte(memoria, 0x39);                                      // CMP EBX, EAX     => Compara EBX y EAX segun los operadores del switch y salta
     cargarByte(memoria, 0xC3);                                      // ...              la cantidad de bytes indicadas despues del Jump If
@@ -1076,7 +1069,7 @@ tSimbolo expresion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent t
     s = aLex(archivo);
   } else if (s.simbolo == MENOS) {
     // Si es un numero negativo
-    cargarByte(memoria, 0x58);                                      // POP EAX
+    cargarPopEax(memoria);                                          // POP EAX
     cargarByte(memoria, 0xF7);                                      // NEG EAX
     cargarByte(memoria, 0xD8);                                      // ...
     cargarByte(memoria, 0x50);                                      // PUSH EAX
@@ -1087,13 +1080,13 @@ tSimbolo expresion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent t
 
   while (s.simbolo == MAS || s.simbolo == MENOS) {
     if (s.simbolo == MAS) {
-      cargarByte(memoria, 0x58);                                    // POP EAX
+      cargarPopEax(memoria);                                        // POP EAX
       cargarByte(memoria, 0x5B);                                    // POP EBX
       cargarByte(memoria, 0x01);                                    // ADD EAX, EBX
       cargarByte(memoria, 0xD8);                                    // ...
       cargarByte(memoria, 0x50);                                    // PUSH EAX
     } else {
-      cargarByte(memoria, 0x58);                                    // POP EAX
+      cargarPopEax(memoria);                                        // POP EAX
       cargarByte(memoria, 0x5B);                                    // POP EBX
       cargarByte(memoria, 0x93);                                    // XCHG EAX, EBX
       cargarByte(memoria, 0x29);                                    // SUB EAX, EBX
@@ -1109,16 +1102,17 @@ tSimbolo expresion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent t
 tSimbolo termino(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent tabla, int posUltimoIdent) {
   s = factor(s, archivo, memoria, tabla, posUltimoIdent);
   while (s.simbolo == POR || s.simbolo == DIVIDIDO) {
+    tTerminal operacion = s.simbolo;
     s = aLex(archivo);
     s = factor(s, archivo, memoria, tabla, posUltimoIdent);
-    if (s.simbolo == POR) {
-      cargarByte(memoria, 0x58);                                    // POP EAX
+    if (operacion == POR) {
+      cargarPopEax(memoria);                                        // POP EAX
       cargarByte(memoria, 0x5B);                                    // POP EBX
       cargarByte(memoria, 0xF7);                                    // IMUL EBX
       cargarByte(memoria, 0xEB);                                    // ...
       cargarByte(memoria, 0x50);                                    // PUSH EAX
     } else {                                                        // Division
-      cargarByte(memoria, 0x58);                                    // POP EAX
+      cargarPopEax(memoria);                                        // POP EAX
       cargarByte(memoria, 0x5B);                                    // POP EBX
       cargarByte(memoria, 0x93);                                    // XCHG EAX, EBX
       cargarByte(memoria, 0x99);                                    // CDQ
@@ -1165,8 +1159,3 @@ tSimbolo factor(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent tabl
   }
   return s;
 }
-
-
-// ERRORES:
-// WRITE
-// Salto inicial del programa (ubicacion de las variables)
