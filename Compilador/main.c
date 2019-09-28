@@ -955,13 +955,11 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent
 
     case WRITELN:
       s = aLex(archivo);
-      if (s.simbolo == PTOCOMA) {                                   // Si se lo invoca sin parametros, es un salto de linea nomas
+      if (s.simbolo == PTOCOMA || s.simbolo != ABREPAREN) {         // Si se lo invoca sin parametros, es un salto de linea nomas
         cargarByte(memoria, 0xE8);                                  // CALL
         cargarInt(memoria, 0x410 - (memoria->topeMemoria + 4));     // Salto de linea
         return s;
       }
-
-      if (s.simbolo != ABREPAREN) error(10, s);                     // Se esperaba ABREPAREN
 
       do {
         s = aLex(archivo);
@@ -1064,6 +1062,7 @@ tSimbolo condicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent t
 }
 
 tSimbolo expresion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent tabla, int posUltimoIdent) {
+  tTerminal termAux;
 
   if (s.simbolo == MAS) {
     s = aLex(archivo);
@@ -1079,13 +1078,16 @@ tSimbolo expresion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent t
   s = termino(s, archivo, memoria, tabla, posUltimoIdent);
 
   while (s.simbolo == MAS || s.simbolo == MENOS) {
-    if (s.simbolo == MAS) {
+    termAux = s.simbolo;
+    s = aLex(archivo);
+    s = termino(s, archivo, memoria, tabla, posUltimoIdent);
+    if (termAux == MAS) {
       cargarPopEax(memoria);                                        // POP EAX
       cargarByte(memoria, 0x5B);                                    // POP EBX
       cargarByte(memoria, 0x01);                                    // ADD EAX, EBX
       cargarByte(memoria, 0xD8);                                    // ...
       cargarByte(memoria, 0x50);                                    // PUSH EAX
-    } else {
+    } else if (termAux == MENOS) {
       cargarPopEax(memoria);                                        // POP EAX
       cargarByte(memoria, 0x5B);                                    // POP EBX
       cargarByte(memoria, 0x93);                                    // XCHG EAX, EBX
@@ -1093,8 +1095,6 @@ tSimbolo expresion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent t
       cargarByte(memoria, 0xD8);                                    // ...
       cargarByte(memoria, 0x50);                                    // PUSH EAX
     }
-    s = aLex(archivo);
-    s = termino(s, archivo, memoria, tabla, posUltimoIdent);
   }
   return s;
 }
@@ -1127,35 +1127,35 @@ tSimbolo termino(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent tab
 tSimbolo factor(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent tabla, int posUltimoIdent) {
   int p;
   switch (s.simbolo) {
-  case IDENT:
-    p = buscarIdent(s.cadena, tabla, 0, posUltimoIdent);
-    if (p == -1) error(15, s);                                      // identificador no encontrado
-    if (tabla[p].tipo == PROCEDURE) {
-      error(18, s);                                                 // Error semantico, se esperaba un VAR o CONST
-    } else if (tabla[p].tipo == VAR) {
-      cargarByte(memoria, 0x8B);                                    // MOV EAX[EDI + ....] (8B 87 gh ef cd ab)
-      cargarByte(memoria, 0x87);                                    // ....
-      cargarInt(memoria, tabla[p].valor);                           // Direccionamiento indexado, el valor de VAR es el offset de bytes respecto de EDI
-      cargarByte(memoria, 0x50);                                    // PUSH EAX
-    } else {                                                        // CONST
-      cargarByte(memoria, 0xB8);                                    // MOV EAX .... (B8 gh ef cd ab)
-      cargarInt(memoria, tabla[p].valor);                           // Direccionamiento inmediato
-      cargarByte(memoria, 0x50);                                    // PUSH EAX
-    }
-    s = aLex(archivo);
-    break;
-  case NUMERO:
-    cargarByte(memoria, 0xB8);                                      // MOV EAX .... (B8 gh ef cd ab)
-    cargarInt(memoria, atoi(s.cadena));                             // Direccionamiento inmediato
-    cargarByte(memoria, 0x50);                                      // PUSH EAX
-    s = aLex(archivo);
-    break;
-  case ABREPAREN:
-    s = aLex(archivo);
-    s = expresion(s, archivo, memoria, tabla, posUltimoIdent);
-    if (s.simbolo != CIERRAPAREN) error(11, s);                     // Se esperaba CIERRAPAREN
-    s = aLex(archivo);
-    break;
+    case IDENT:
+      p = buscarIdent(s.cadena, tabla, 0, posUltimoIdent);
+      if (p == -1) error(15, s);                                      // identificador no encontrado
+      if (tabla[p].tipo == PROCEDURE) {
+        error(18, s);                                                 // Error semantico, se esperaba un VAR o CONST
+      } else if (tabla[p].tipo == VAR) {
+        cargarByte(memoria, 0x8B);                                    // MOV EAX[EDI + ....] (8B 87 gh ef cd ab)
+        cargarByte(memoria, 0x87);                                    // ....
+        cargarInt(memoria, tabla[p].valor);                           // Direccionamiento indexado, el valor de VAR es el offset de bytes respecto de EDI
+        cargarByte(memoria, 0x50);                                    // PUSH EAX
+      } else if (tabla[p].tipo == CONST) {                            // CONST
+        cargarByte(memoria, 0xB8);                                    // MOV EAX .... (B8 gh ef cd ab)
+        cargarInt(memoria, tabla[p].valor);                           // Direccionamiento inmediato
+        cargarByte(memoria, 0x50);                                    // PUSH EAX
+      }
+      s = aLex(archivo);
+      break;
+    case NUMERO:
+      cargarByte(memoria, 0xB8);                                      // MOV EAX .... (B8 gh ef cd ab)
+      cargarInt(memoria, atoi(s.cadena));                             // Direccionamiento inmediato
+      cargarByte(memoria, 0x50);                                      // PUSH EAX
+      s = aLex(archivo);
+      break;
+    case ABREPAREN:
+      s = aLex(archivo);
+      s = expresion(s, archivo, memoria, tabla, posUltimoIdent);
+      if (s.simbolo != CIERRAPAREN) error(11, s);                     // Se esperaba CIERRAPAREN
+      s = aLex(archivo);
+      break;
   }
   return s;
 }
