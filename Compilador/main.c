@@ -814,7 +814,8 @@ tSimbolo bloque(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent tabl
 }
 
 tSimbolo proposicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent tabla, int posUltimoIdent) {
-  int p, posPrevCond, posPostCond, desde, dist, posCadena;
+  int p, posPrevCond, posPostCond, origSalto, destSalto, dist, posCadena;
+
   switch (s.simbolo) {
 
     case IDENT:
@@ -864,14 +865,14 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent
       s = aLex(archivo);
       s = condicion(s, archivo, memoria, tabla, posUltimoIdent);
 
-      int origSalto = memoria->topeMemoria;                         // Guardamos posicion previa a la proposicion para el fixup de condicion
+      origSalto = memoria->topeMemoria;                             // Guardamos posicion previa a la proposicion para el fixup de condicion
 
       if (s.simbolo != THEN) error(8, s);                           // Se esperaba THEN
 
       s = aLex(archivo);
       s = proposicion(s, archivo, memoria, tabla, posUltimoIdent);
 
-      int destSalto = memoria->topeMemoria;                         // Guardamos posicion posterior a la proposicion
+      destSalto = memoria->topeMemoria;                             // Guardamos posicion posterior a la proposicion
       cargarIntEn(memoria, destSalto - origSalto, origSalto - 4);   // Arreglamos salto de condicion
       break;
 
@@ -880,16 +881,20 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent
 
       posPrevCond = memoria->topeMemoria;
       s = condicion(s, archivo, memoria, tabla, posUltimoIdent);
-      if (s.simbolo != DO) error(9, s);                             // Se esperaba DO
       posPostCond = memoria->topeMemoria;
+
+      if (s.simbolo != DO) error(9, s);                             // Se esperaba DO
 
       s = aLex(archivo);
       s = proposicion(s, archivo, memoria, tabla, posUltimoIdent);
 
-      dist = posPrevCond - (memoria->topeMemoria + 4);              // Cantidad de bytes a saltar hacia atras
+      destSalto = memoria->topeMemoria;
+
+      dist = posPrevCond - (memoria->topeMemoria + 5);              // Cantidad de bytes a saltar hacia atras
       cargarByte(memoria, 0xE9);                                    // JMP dir, salto incondicional hacia atras
-      cargarInt(memoria, dist);                                     // ...
-      cargarIntEn(memoria, posPostCond - 4, memoria->topeMemoria - posPostCond);
+      cargarInt(memoria, dist);                                     // ... (vuelve hasta el inicio de la condicion)
+      cargarIntEn(memoria, memoria->topeMemoria - posPostCond, posPostCond - 4);    // Fixup del salto E9 de la condicion del while
+                                                                                    // (para saltar todo el while si la condicion da false)
       break;
 
     case READLN:
@@ -998,6 +1003,8 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent
 
 tSimbolo condicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent tabla, int posUltimoIdent) {
 
+  tTerminal operador;
+
   if (s.simbolo == ODD) {
     s = aLex(archivo);
     s = expresion(s, archivo, memoria, tabla, posUltimoIdent);
@@ -1064,16 +1071,18 @@ tSimbolo expresion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent t
 
   if (s.simbolo == MAS) {
     s = aLex(archivo);
+    s = termino(s, archivo, memoria, tabla, posUltimoIdent);
   } else if (s.simbolo == MENOS) {
     // Si es un numero negativo
+    s = aLex(archivo);
+    s = termino(s, archivo, memoria, tabla, posUltimoIdent);
     cargarPopEax(memoria);                                          // POP EAX
     cargarByte(memoria, 0xF7);                                      // NEG EAX
     cargarByte(memoria, 0xD8);                                      // ...
     cargarByte(memoria, 0x50);                                      // PUSH EAX
-    s = aLex(archivo);
+  } else {
+    s = termino(s, archivo, memoria, tabla, posUltimoIdent);
   }
-
-  s = termino(s, archivo, memoria, tabla, posUltimoIdent);
 
   while (s.simbolo == MAS || s.simbolo == MENOS) {
     termAux = s.simbolo;
