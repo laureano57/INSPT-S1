@@ -1011,46 +1011,44 @@ tSimbolo condicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent t
   } else {
     s = expresion(s, archivo, memoria, tabla, posUltimoIdent);
 
+    operador = s.simbolo;                                           // Guardo el operador y leo la siguiente expresion
+
+    s = aLex(archivo);
+    s = expresion(s, archivo, memoria, tabla, posUltimoIdent);
+
     cargarPopEax(memoria);                                          // POP EAX
     cargarByte(memoria, 0x5B);                                      // POP EBX
     cargarByte(memoria, 0x39);                                      // CMP EBX, EAX     => Compara EBX y EAX segun los operadores del switch y salta
     cargarByte(memoria, 0xC3);                                      // ...              la cantidad de bytes indicadas despues del Jump If
 
-    switch (s.simbolo) {
+    switch (operador) {
     case IGUAL:
       cargarByte(memoria, 0x74);                                    // JE dir     => Jump if equal
       cargarByte(memoria, 0x05);                                    // Salta 5 bytes (una instruccion)
-      s = aLex(archivo);
       break;
     case DISTINTO:
       cargarByte(memoria, 0x75);                                    // JNE dir    => Jump if not equal
       cargarByte(memoria, 0x05);
-      s = aLex(archivo);
       break;
     case MAYOR:
       cargarByte(memoria, 0x7F);                                    // JG dir    => Jump if greater than
       cargarByte(memoria, 0x05);
-      s = aLex(archivo);
       break;
     case MENOR:
       cargarByte(memoria, 0x7C);                                    // JL dir    => Jump if less than
       cargarByte(memoria, 0x05);
-      s = aLex(archivo);
       break;
     case MAYORIGUAL:
       cargarByte(memoria, 0x7D);                                    // JGE dir    => Jump if greater than or equal
       cargarByte(memoria, 0x05);
-      s = aLex(archivo);
       break;
     case MENORIGUAL:
       cargarByte(memoria, 0x7E);                                    // JLE dir    => Jump if less than or equal
       cargarByte(memoria, 0x05);
-      s = aLex(archivo);
       break;
     default:
       error(12, s);                                                 // Se esperaba un operador relacional
     }
-    s = expresion(s, archivo, memoria, tabla, posUltimoIdent);
   }
 
   // Salto de memoria, según si entra ó no en la proposición que sigue despues de la condicion.
