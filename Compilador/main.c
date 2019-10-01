@@ -139,7 +139,7 @@ void dumpToFile(memStruct *, char *);
 void getOutputFilename(char *, char **);
 
 // ####################################################################################################################
-// ####################################### Funciones del analizador sintactico #######################################
+// ####################################### Funciones del analizador sintactico ########################################
 // ####################################################################################################################
 
 tSimbolo programa(tSimbolo, FILE *archivo, memStruct *);
@@ -403,7 +403,6 @@ void error(int codigo, tSimbolo s) {
 
 // Busca identificador en la tabla de identificadores y devuelve la posicion o -1
 int buscarIdent(char *id, tablaDeIdent tabla, int posPrimerIdent, int posUltimoIdent) {
-
   char cadenaAux[MAX_LONGITUD_CADENA + 3];
   strcpy(cadenaAux, id);
   uppercase(cadenaAux);
@@ -735,10 +734,10 @@ void codigoFinal(memStruct *memoria, int desplVarMem) {
     int baseOfCode = leerIntDe(memoria, 200);                       // memoria[200] es base of code
     base = imageBase + baseOfCode;
   } else if (strcmp(OS_NAME, "linux") == 0) {
-    base = leerIntDe(memoria, 193) + 928;                           // memoria[193] es Address -> POR ALGUNA RAZON LE FALTABA SUMAR + 928, CHEQUEAR!
+    base = leerIntDe(memoria, 193);                                 // memoria[193] es Address
   }
                                                                     // Pag. 31 ver. Windows, parrafo 3
-  int distBase = base + memoria->topeMemoria - VAR_LENGTH_START;    // se carga en la posicion VAR_LENGTH_START el size de de la parte text,
+  int distBase = base + memoria->topeMemoria - TEXT_START;          // se carga en la posicion VAR_LENGTH_START el size de de la parte text,
   cargarIntEn(memoria, distBase, VAR_LENGTH_START + 1);             // VAR_LENGTH_START es la posicion donde termina la parte de long. fija
                                                                     // En windows, el codigo empieza en 0x701 / 1793 en linux en 0x481 / 1153
 
@@ -790,6 +789,7 @@ tSimbolo bloque(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent tabl
       // Si no encuentro el identificador en la tabla, lo agrego
       if (p != -1) error(13, s);                                    // El ident ya estaba declarado
       tabla[base + desplazamiento].tipo = CONST;
+      uppercase(s.cadena);
       strcpy(tabla[base + desplazamiento].nombre, s.cadena);
 
       s = aLex(archivo);
@@ -816,6 +816,7 @@ tSimbolo bloque(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent tabl
       if (p != -1) error(13, s);                                    // Ya estaba declarado en la tabla
 
       tabla[base + desplazamiento].tipo = VAR;
+      uppercase(s.cadena);
       strcpy(tabla[base + desplazamiento].nombre, s.cadena);
       tabla[base + desplazamiento].valor = *desplVarMem;            // La dirección de memoria a que se refiere la variable
                                                                     // (sólo el desplazamiento, es una posicion relativa a EDI)
@@ -838,6 +839,7 @@ tSimbolo bloque(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent tabl
     if (p != -1) error(13, s);                                      // El identificador ya estaba declarado
 
     tabla[base + desplazamiento].tipo = PROCEDURE;
+    uppercase(s.cadena);
     strcpy(tabla[base + desplazamiento].nombre, s.cadena);
     tabla[base + desplazamiento].valor = memoria->topeMemoria;      // La dirección de memoria donde comienza la proposición a ejecutar en el bloque
     desplazamiento++;
