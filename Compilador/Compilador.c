@@ -1,4 +1,10 @@
-#include <ctype.h> // Para usar isgraph
+// ####################################################################################################################
+// ####################################  INSPT - Sistemas de computacion I - 2019  ####################################
+// #################################### Compilador PL/0 - Gonzalez, Olmedo, Stella ####################################
+// ####################################################################################################################
+
+// Librerias
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,8 +13,7 @@
 // #################################################### Constantes ####################################################
 // ####################################################################################################################
 
-// ########################################## Codigo especifico de Win/Linux ##########################################
-
+// Codigo especifico de Win/Linux
 #if defined(_WIN32) || defined(_WIN64)
   #define OS_NAME "windows"
   #define PRINT_STRING 0x3E0
@@ -101,10 +106,10 @@ typedef struct {
 typedef tEntradaTabla tablaDeIdent[MAX_CANT_IDENT];
 
 // ####################################################################################################################
-// ###################################################### Helpers ######################################################
+// #################################################### Signatures ####################################################
 // ####################################################################################################################
 
-tSimbolo aLex(FILE *);
+// ##################################################### Helpers ######################################################
 
 void imprimir(tSimbolo);
 
@@ -138,10 +143,9 @@ void dumpToFile(memStruct *, char *);
 
 void getOutputFilename(char *, char **);
 
-// ####################################################################################################################
-// ####################################### Funciones del analizador sintactico ########################################
-// ####################################################################################################################
+// ########################################## Analizador lexico y sintactico ##########################################
 
+tSimbolo aLex(FILE *);
 tSimbolo programa(tSimbolo, FILE *archivo, memStruct *);
 tSimbolo bloque(tSimbolo, FILE *archivo, memStruct *, tablaDeIdent, int *desplVarMem, int base);
 tSimbolo proposicion(tSimbolo, FILE *archivo, memStruct *, tablaDeIdent, int posUltimoIdent);
@@ -174,13 +178,11 @@ int main(int argc, char *argv[]) {
   // Cargo el header y los bytes de entrada y salida al array de bytes de memoria
   cargarHeader(memoria);
 
-  // if (0) {                                                                           // Para harcodear nombre de archivo,
-  if (argc != 2) {                                                                      // permutar estas lineas
+  if (argc != 2) {
       printf("No se ingreso ningun archivo por parametro, saliendo...\n");
   } else {
     FILE *archivo;
-    // archivo = fopen("test.pl0", "r");                                                // Para harcodear nombre de archivo,
-    archivo = fopen(argv[1], "r");                                                      // permutar estas lineas
+    archivo = fopen(argv[1], "r");
 
     if (archivo == NULL) {
       printf("Error de apertura del archivo [%s].\n", argv[1]);
@@ -193,8 +195,8 @@ int main(int argc, char *argv[]) {
       printf("Archivo procesado exitosamente\n");
 
       // Vuelca array de memoria en archivo
-      // getOutputFilename("test.pl0", &outputFilename);                                // Para harcodear nombre de archivo,
-      getOutputFilename(argv[1], &outputFilename);                                      // permutar estas lineas
+      getOutputFilename(argv[1], &outputFilename);
+
       printf("\nArchivo generado: %s\n", outputFilename);
       dumpToFile(memoria, outputFilename);
     }
@@ -525,7 +527,6 @@ tSimbolo aLex(FILE *fp) {
   do {
     c = getc(fp);
   } while (c != EOF && !isgraph(c));
-  // Corta cuando c == EOF o cuando isgraph(c) == true
 
   if (c == EOF) {
     a.simbolo = FIN_DE_ARCHIVO;
@@ -537,14 +538,12 @@ tSimbolo aLex(FILE *fp) {
         if (isalpha(c) || isdigit(c))
           concatenar(a.cadena, c);
       } while (c != EOF && (isalpha(c) || isdigit(c)));
-      // Corta cuando c==EOF o cuando c no es letra ni dígito
 
       ungetc(c, fp);
       // El char que provoco el fin de la cadena debe volver a
       // leerse en el próximo llamado a aLex
 
-      char cadenaAux[MAX_LONGITUD_CADENA + 3];
-      // Más los apóstrofos y el \0 final
+      char cadenaAux[MAX_LONGITUD_CADENA + 3]; // Más los apóstrofos y el \0 final
 
       strcpy(cadenaAux, a.cadena);
       uppercase(cadenaAux);
@@ -582,10 +581,8 @@ tSimbolo aLex(FILE *fp) {
     } else if (isdigit(c)) {
       do {
         c = getc(fp);
-        if (isdigit(c))
-          concatenar(a.cadena, c);
+        if (isdigit(c)) concatenar(a.cadena, c);
       } while (c != EOF && isdigit(c));
-      // Corta cuando c==EOF o cuando c no es dígito
 
       ungetc(c, fp);
       // El char que provoco el fin de la cadena debe volver a
@@ -598,10 +595,8 @@ tSimbolo aLex(FILE *fp) {
       case '\'':
         do {
           c = getc(fp);
-          if (c != EOF && c != '\n')
-            concatenar(a.cadena, c);
+          if (c != EOF && c != '\n') concatenar(a.cadena, c);
         } while (c != EOF && c != '\n' && c != '\'');
-        // Corta cuando c==EOF o c=='\n' o cuando c es un apóstrofo
 
         if (c == EOF || c == '\n') {
           a.simbolo = NULO;
@@ -707,8 +702,9 @@ tSimbolo programa(tSimbolo s, FILE *archivo, memStruct *memoria) {
 
   int desplVarMem = 0;                                              // Desplazamiento de variables en memoria, aumenta de 4 en 4
 
-  // La primera instrucción del código traducido será la inicialización del registro EDI para que apunte a la dirección a partir de la cual
-  // estarán alojados los valores de las variables. Como esta dirección aún no se conoce, deberá reservarse el lugar grabando BF 00 00 00 00.
+  // La primera instrucción del código traducido será la inicialización del registro EDI para que apunte a la dirección
+  // a partir de la cual estarán alojados los valores de las variables. Como esta dirección aún no se conoce, deberá
+  // reservarse el lugar grabando BF 00 00 00 00.
   cargarByte(memoria, 0xBF);                                        // MOV EDI,   pos. 1792
   cargarInt(memoria, 0);                                            // 0 0 0 0    pos. 1793, Inserta 4 bytes en 0
 
@@ -877,7 +873,7 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent
     case IDENT:
       p = buscarIdent(s.cadena, tabla, 0, posUltimoIdent);
 
-      if (p == -1) error(15, s);                                    // identificador no encontrado
+      if (p == -1) error(15, s);                                    // Identificador no encontrado
       if (tabla[p].tipo != VAR) error(17, s);                       // Error semantico, se esperaba un VAR
 
       s = aLex(archivo);
@@ -1138,8 +1134,7 @@ tSimbolo expresion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent t
   if (s.simbolo == MAS) {
     s = aLex(archivo);
     s = termino(s, archivo, memoria, tabla, posUltimoIdent);
-  } else if (s.simbolo == MENOS) {
-    // Si es un numero negativo
+  } else if (s.simbolo == MENOS) {                                  // Si es un numero negativo
     s = aLex(archivo);
     s = termino(s, archivo, memoria, tabla, posUltimoIdent);
     cargarPopEax(memoria);                                          // POP EAX
