@@ -66,8 +66,11 @@ typedef enum {
   DISTINTO,
   DIVIDIDO,
   DO,
+  ELSE,
   END,
   FIN_DE_ARCHIVO,
+  FOR,
+  HALT,
   IDENT,
   IF,
   IGUAL,
@@ -115,8 +118,6 @@ void imprimir(tSimbolo);
 
 void concatenar(char *, char);
 
-void stringPointerCopy(char *, const char *);
-
 void uppercase(char *);
 
 void error(int, tSimbolo);
@@ -141,14 +142,14 @@ void writeString(memStruct *, tSimbolo);
 
 void dumpToFile(memStruct *, char *);
 
-void getOutputFilename(char *, char **);
+void getOutputFilename(char *, char *);
 
 // ########################################## Analizador lexico y sintactico ##########################################
 
 tSimbolo aLex(FILE *);
 tSimbolo programa(tSimbolo, FILE *archivo, memStruct *);
 tSimbolo bloque(tSimbolo, FILE *archivo, memStruct *, tablaDeIdent, int *desplVarMem, int base);
-tSimbolo proposicion(tSimbolo, FILE *archivo, memStruct *, tablaDeIdent, int posUltimoIdent);
+tSimbolo proposicion(tSimbolo, FILE *archivo, memStruct *, tablaDeIdent, int posUltimoIdent, int *desplVarMem);
 tSimbolo condicion(tSimbolo, FILE *archivo, memStruct *, tablaDeIdent, int posUltimoIdent);
 tSimbolo expresion(tSimbolo, FILE *archivo, memStruct *, tablaDeIdent, int posUltimoIdent);
 tSimbolo termino(tSimbolo, FILE *archivo, memStruct *, tablaDeIdent, int posUltimoIdent);
@@ -168,7 +169,7 @@ int main(int argc, char *argv[]) {
   byte bytesArray[8192];
 
   // Puntero al nombre del compilado de salida
-  char *outputFilename = malloc(sizeof(char) * 32);
+  char outputFilename[80];
 
   // Inicializo memoria para empezar a guardar bytes en bytesArray (array de salida)
   memStruct *memoria = malloc(sizeof(memStruct));
@@ -195,7 +196,7 @@ int main(int argc, char *argv[]) {
       printf("Archivo procesado exitosamente\n");
 
       // Vuelca array de memoria en archivo
-      getOutputFilename(argv[1], &outputFilename);
+      getOutputFilename(argv[1], outputFilename);
 
       printf("\nArchivo generado: %s\n", outputFilename);
       dumpToFile(memoria, outputFilename);
@@ -205,7 +206,7 @@ int main(int argc, char *argv[]) {
 }
 
 // ####################################################################################################################
-// ##################################################### Helpers #####################################################
+// ##################################################### Helpers ######################################################
 // ####################################################################################################################
 
 void imprimir(tSimbolo simb) {
@@ -247,8 +248,17 @@ void imprimir(tSimbolo simb) {
   case END:
     printf("END");
     break;
+  case ELSE:
+    printf("ELSE");
+    break;
   case FIN_DE_ARCHIVO:
     printf("FIN_DE_ARCHIVO");
+    break;
+  case FOR:
+    printf("FOR");
+    break;
+  case HALT:
+    printf("HALT");
     break;
   case IDENT:
     printf("IDENT");
@@ -326,10 +336,6 @@ void concatenar(char *s, char c) {
     *s++ = c;
     *s++ = '\0';
   }
-}
-
-void stringPointerCopy(char *dest, const char *src) {
-  while (*dest++ = *src++);
 }
 
 void uppercase(char *s) {
@@ -507,13 +513,13 @@ void dumpToFile(memStruct *memoria, char *nombreArchivo) {
 }
 
 // Devuelve nombre de archivo ejecutable
-void getOutputFilename(char *arg, char **output) {
-  char *token, *filename;
-  filename = malloc(sizeof(char) * 32);
-  stringPointerCopy(filename, arg);
+void getOutputFilename(char *arg, char *output) {
+  char *token;
+  char filename[80];
+  strcpy(filename, arg);
   token = strtok(filename, ".");
-  strcpy(*output, token);
-  if (strcmp(OS_NAME, "windows") == 0) strcat(*output, ".exe");
+  strcpy(output, token);
+  if (strcmp(OS_NAME, "windows") == 0) strcat(output, ".exe");
 }
 
 // ####################################################################################################################
@@ -558,6 +564,12 @@ tSimbolo aLex(FILE *fp) {
         a.simbolo = DO;
       else if (strcmp(cadenaAux, "END") == 0)
         a.simbolo = END;
+      else if (strcmp(cadenaAux, "ELSE") == 0)
+        a.simbolo = ELSE;
+      else if (strcmp(cadenaAux, "FOR") == 0)
+        a.simbolo = FOR;
+      else if (strcmp(cadenaAux, "HALT") == 0)
+        a.simbolo = HALT;
       else if (strcmp(cadenaAux, "IF") == 0)
         a.simbolo = IF;
       else if (strcmp(cadenaAux, "ODD") == 0)
@@ -861,12 +873,12 @@ tSimbolo bloque(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent tabl
     memoria->topeMemoria -= 5;
   }
 
-  s = proposicion(s, archivo, memoria, tabla, (base + desplazamiento - 1));
+  s = proposicion(s, archivo, memoria, tabla, (base + desplazamiento - 1), desplVarMem);
   return s;
 }
 
-tSimbolo proposicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent tabla, int posUltimoIdent) {
-  int p, posPrevCond, posPostCond, origSalto, destSalto, dist;
+tSimbolo proposicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent tabla, int posUltimoIdent, int *desplVarMem) {
+  int p, posPrevCond, posPostCond, origSalto, destSalto, origSaltoElse, destSaltoElse, dist;
 
   switch (s.simbolo) {
 
@@ -904,10 +916,10 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent
 
     case BEGIN:
       s = aLex(archivo);
-      s = proposicion(s, archivo, memoria, tabla, posUltimoIdent);
+      s = proposicion(s, archivo, memoria, tabla, posUltimoIdent, desplVarMem);
       while (s.simbolo == PTOCOMA) {
         s = aLex(archivo);
-        s = proposicion(s, archivo, memoria, tabla, posUltimoIdent);
+        s = proposicion(s, archivo, memoria, tabla, posUltimoIdent, desplVarMem);
       }
       if (s.simbolo != END) error(7, s);                            // Se esperaba END
       s = aLex(archivo);
@@ -922,10 +934,26 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent
       if (s.simbolo != THEN) error(8, s);                           // Se esperaba THEN
 
       s = aLex(archivo);
-      s = proposicion(s, archivo, memoria, tabla, posUltimoIdent);
+      s = proposicion(s, archivo, memoria, tabla, posUltimoIdent, desplVarMem);
 
       destSalto = memoria->topeMemoria;                             // Guardamos posicion posterior a la proposicion
       cargarIntEn(memoria, destSalto - origSalto, origSalto - 4);   // Arreglamos salto de condicion
+
+      if (s.simbolo == ELSE) {
+        cargarIntEn(memoria, destSalto - origSalto + 5, origSalto - 4);   // Agregamos +5 al salto incondicional inicial, ya que tiene que saltar
+                                                                          // el E9 de la proposicion del ELSE
+
+        origSaltoElse = memoria->topeMemoria;                       // Guardo posicion de mem. antes de la prop. del else
+        cargarByte(memoria, 0xE9);                                  // Cargo un salto incond. para arreglar despues
+        cargarInt(memoria, 0);
+
+        s = aLex(archivo);
+        s = proposicion(s, archivo, memoria, tabla, posUltimoIdent, desplVarMem);
+
+        destSaltoElse = memoria->topeMemoria;                       // Dest. del salto
+        cargarIntEn(memoria, destSaltoElse - origSaltoElse, origSaltoElse - 4);
+      }
+
       break;
 
     case WHILE:
@@ -938,7 +966,82 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent
       if (s.simbolo != DO) error(9, s);                             // Se esperaba DO
 
       s = aLex(archivo);
-      s = proposicion(s, archivo, memoria, tabla, posUltimoIdent);
+      s = proposicion(s, archivo, memoria, tabla, posUltimoIdent, desplVarMem);
+
+      destSalto = memoria->topeMemoria;
+
+      dist = posPrevCond - (memoria->topeMemoria + 5);              // Cantidad de bytes a saltar hacia atras
+      cargarByte(memoria, 0xE9);                                    // JMP dir, salto incondicional hacia atras
+      cargarInt(memoria, dist);                                     // ... (vuelve hasta el inicio de la condicion)
+      cargarIntEn(memoria, memoria->topeMemoria - posPostCond, posPostCond - 4);    // Fixup del salto E9 de la condicion del while
+                                                                                    // (para saltar todo el while si la condicion da false)
+      break;
+
+    case FOR:
+      s = aLex(archivo);
+
+      if (s.simbolo != ABREPAREN) error(10, s);
+
+      s = aLex(archivo);
+
+
+      // 1er parametro
+      if (s.simbolo != IDENT) error(2, s);
+
+      p = buscarIdent(s.cadena, tabla, 0, posUltimoIdent);
+
+      if (p == -1) error(15, s);                                    // Identificador no encontrado
+      if (tabla[p].tipo != VAR) error(17, s);                       // Error semantico, se esperaba un VAR
+
+      s = aLex(archivo);
+      if (s.simbolo != ASIGNACION) error(6, s);                     // Error sintactico, se esperaba asignacion
+
+      s = aLex(archivo);
+      s = expresion(s, archivo, memoria, tabla, posUltimoIdent);
+      cargarPopEax(memoria);                                        //  POP EAX
+      cargarByte(memoria, 0x89);                                    //  MOV [EDI + ....], EAX
+      cargarByte(memoria, 0x87);                                    //  ....
+      cargarInt(memoria, tabla[p].valor);                           //  Offset de memoria respecto de EDI
+
+
+      // 2do parametro
+      if (s.simbolo != PTOCOMA) error(5, s);
+
+      posPrevCond = memoria->topeMemoria;
+      s = aLex(archivo);
+      s = condicion(s, archivo, memoria, tabla, posUltimoIdent);
+      if (s.simbolo != PTOCOMA) error(5, s);
+      posPostCond = memoria->topeMemoria;
+
+
+      // 3er parametro
+      s = aLex(archivo);
+
+      if (s.simbolo != IDENT) error(2, s);
+
+      p = buscarIdent(s.cadena, tabla, 0, posUltimoIdent);
+
+      if (p == -1) error(15, s);                                    // Identificador no encontrado
+      if (tabla[p].tipo != VAR) error(17, s);                       // Error semantico, se esperaba un VAR
+
+      s = aLex(archivo);
+      if (s.simbolo != ASIGNACION) error(6, s);                     // Error sintactico, se esperaba asignacion
+
+      s = aLex(archivo);
+      s = expresion(s, archivo, memoria, tabla, posUltimoIdent);
+      cargarPopEax(memoria);                                        //  POP EAX
+      cargarByte(memoria, 0x89);                                    //  MOV [EDI + ....], EAX
+      cargarByte(memoria, 0x87);                                    //  ....
+      cargarInt(memoria, tabla[p].valor);                           //  Offset de memoria respecto de EDI
+
+      if (s.simbolo != CIERRAPAREN) error(11, s);
+
+      s = aLex(archivo);
+
+      if (s.simbolo != DO) error(9, s);                             // Se esperaba DO
+
+      s = aLex(archivo);
+      s = proposicion(s, archivo, memoria, tabla, posUltimoIdent, desplVarMem);
 
       destSalto = memoria->topeMemoria;
 
@@ -1027,6 +1130,12 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent
 
       if (s.simbolo != CIERRAPAREN) error(11, s);                   // Se esperaba CIERRAPAREN
       s = aLex(archivo);
+      break;
+
+    case HALT:
+      codigoFinal(memoria, *desplVarMem);
+      s = aLex(archivo);
+      break;
   }
   return s;
 }
