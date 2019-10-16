@@ -80,6 +80,7 @@ typedef enum {
   MENOR,
   MENORIGUAL,
   MENOS,
+  NOT,
   NULO,
   NUMERO,
   ODD,
@@ -286,6 +287,9 @@ void imprimir(tSimbolo simb) {
     break;
   case MENOS:
     printf("MENOS");
+    break;
+  case NOT:
+    printf("NOT");
     break;
   case NULO:
     printf("NULO");
@@ -574,6 +578,8 @@ tSimbolo aLex(FILE *fp) {
         a.simbolo = IF;
       else if (strcmp(cadenaAux, "ODD") == 0)
         a.simbolo = ODD;
+      else if (strcmp(cadenaAux, "NOT") == 0)
+        a.simbolo = NOT;
       else if (strcmp(cadenaAux, "PROCEDURE") == 0)
         a.simbolo = PROCEDURE;
       else if (strcmp(cadenaAux, "READLN") == 0)
@@ -1173,7 +1179,7 @@ void writeString(memStruct *memoria, tSimbolo s) {
 }
 
 tSimbolo condicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent tabla, int posUltimoIdent) {
-
+  int isIfNot = 0;
   tTerminal operador;
 
   if (s.simbolo == ODD) {
@@ -1187,6 +1193,12 @@ tSimbolo condicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent t
     cargarByte(memoria, 0x05);                                      // ... (ab)   => 5 bytes
 
   } else {
+
+    if (s.simbolo == NOT) {
+        isIfNot = 1;                                                // Guardo un flag si es un IF NOT
+        s = aLex(archivo);
+    };
+
     s = expresion(s, archivo, memoria, tabla, posUltimoIdent);
 
     operador = s.simbolo;                                           // Guardo el operador y leo la siguiente expresion
@@ -1226,6 +1238,11 @@ tSimbolo condicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent t
       break;
     default:
       error(12, s);                                                 // Se esperaba un operador relacional
+    }
+
+    if (isIfNot) {                                                  // Si es un IF NOT, al darse la condicion true saltea esta instruccion
+        cargarByte(memoria, 0xE9);                                  // y entra directamente en el E9 siguiente que saltea toda la proposicion
+        cargarInt(memoria, 5);                                      // Si la condicion es FALSE, entra en este E9 y saltea el E9 siguiente 
     }
   }
 
