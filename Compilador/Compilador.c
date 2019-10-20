@@ -810,9 +810,17 @@ tSimbolo bloque(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent tabl
       if (s.simbolo != IGUAL) error(3, s);                          // Se esperaba un IGUAL
 
       s = aLex(archivo);
+
+      if (s.simbolo == MENOS) {                                     // Si el numero es negativo
+      s = aLex(archivo);
       if (s.simbolo != NUMERO) error(4, s);                         // Se esperaba un NUMERO
+        tabla[base + desplazamiento].valor = -atoi(s.cadena);
+        desplazamiento++;
+      } else {
+        if (s.simbolo != NUMERO) error(4, s);                         // Se esperaba un NUMERO
       tabla[base + desplazamiento].valor = atoi(s.cadena);
       desplazamiento++;
+      }
 
       s = aLex(archivo);
     } while (s.simbolo == COMA);
