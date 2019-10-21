@@ -406,6 +406,9 @@ void error(int codigo, tSimbolo s) {
   case 18:
     printf("Error semantico, el identificador \"%s\" no es de tipo NUMERO\n", s.cadena);
     break;
+  case 19:
+    printf("Error, se esperaba un WHILE: %s\n", s.cadena);
+    break;
   default:
     printf("Error generico\n");
     break;
@@ -892,7 +895,7 @@ tSimbolo bloque(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent tabl
 }
 
 tSimbolo proposicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent tabla, int posUltimoIdent, int *desplVarMem) {
-  int p, posPrevCond, posPostCond, origSalto, destSalto, origSaltoElse, destSaltoElse, dist;
+  int p, posPrevCond, posPostCond, posPrevProp, origSalto, destSalto, origSaltoElse, destSaltoElse, dist;
 
   switch (s.simbolo) {
 
@@ -989,6 +992,24 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent
       cargarInt(memoria, dist);                                     // ... (vuelve hasta el inicio de la condicion)
       cargarIntEn(memoria, memoria->topeMemoria - posPostCond, posPostCond - 4);    // Fixup del salto E9 de la condicion del while
                                                                                     // (para saltar todo el while si la condicion da false)
+      break;
+
+    case DO:
+      s = aLex(archivo);
+
+      posPrevProp = memoria->topeMemoria;
+      s = proposicion(s, archivo, memoria, tabla, posUltimoIdent, desplVarMem);
+
+      if (s.simbolo != WHILE) error(19, s);                            // Se esperaba un WHILE
+
+      s = aLex(archivo);
+
+      s = condicion(s, archivo, memoria, tabla, posUltimoIdent);
+
+      cargarIntEn(memoria, 5, memoria->topeMemoria - 4);               // Fixup del E9 de la condicion, saltea la próxima instruccion si da false
+      cargarByte(memoria, 0xE9);                                       // Salta incondicionalmente al cuerpo de la proposicion
+      cargarInt(memoria, posPrevProp - memoria->topeMemoria - 4);
+
       break;
 
     case FOR:
