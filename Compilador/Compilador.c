@@ -89,6 +89,7 @@ typedef enum {
   PTOCOMA,
   PUNTO,
   READLN,
+  SHL,
   THEN,
   VAR,
   WHILE,
@@ -314,6 +315,9 @@ void imprimir(tSimbolo simb) {
     break;
   case READLN:
     printf("READLN");
+    break;
+  case SHL:
+    printf("SHL");
     break;
   case THEN:
     printf("THEN");
@@ -587,6 +591,8 @@ tSimbolo aLex(FILE *fp) {
         a.simbolo = PROCEDURE;
       else if (strcmp(cadenaAux, "READLN") == 0)
         a.simbolo = READLN;
+      else if (strcmp(cadenaAux, "SHL") == 0)
+        a.simbolo = SHL;
       else if (strcmp(cadenaAux, "THEN") == 0)
         a.simbolo = THEN;
       else if (strcmp(cadenaAux, "VAR") == 0)
@@ -1169,6 +1175,42 @@ tSimbolo proposicion(tSimbolo s, FILE *archivo, memStruct *memoria, tablaDeIdent
 
     case HALT:
       codigoFinal(memoria, *desplVarMem);
+      s = aLex(archivo);
+      break;
+
+    case SHL:
+      // 2do parcial 2019  ||  SHL -> ( -> VAR - > ) -> ;
+      s = aLex(archivo);
+      if (s.simbolo != ABREPAREN) error(10, s);                   // Se esperaba ABREPAREN
+
+      s = aLex(archivo);
+      if (s.simbolo != IDENT) error(2, s);                        // Se esperaba IDENT
+
+      p = buscarIdent(s.cadena, tabla, 0, posUltimoIdent);
+      if (p == -1) error(15, s);                                  // No se encontro el IDENT en la tabla
+      if (tabla[p].tipo != VAR) error(14, s);                     // Se esperaba un VAR
+
+      // Traigo la variable de memoria y la cargo en EAX
+      cargarByte(memoria, 0x8B);                                  // MOV EAX[EDI + ....] (8B 87 gh ef cd ab)
+      cargarByte(memoria, 0x87);                                  // ....
+      cargarInt(memoria, tabla[p].valor);                         // Direccionamiento indexado, el valor de VAR es el offset de bytes respecto de EDI
+      cargarByte(memoria, 0x50);                                  // PUSH EAX -> Inserto EAX en la pila
+
+      // Multiplico por 2 (shift left)
+      cargarByte(memoria, 0xB8);                                  // MOV EAX, 02 00 00 00 (cargo un 2 en EAX)
+      cargarInt(memoria, 2);                                      // ...
+      cargarByte(memoria, 0x5B);                                  // POP EBX
+      cargarByte(memoria, 0xF7);                                  // IMUL EBX   (Multiplica EAX y EBX y lo pone en EAX)
+      cargarByte(memoria, 0xEB);                                  // ...
+
+      // Actualizo la variable en memoria copiando EAX a la direccion EDI + tabla[p].valor
+      cargarByte(memoria, 0x89);                                    //  MOV [EDI + ....], EAX
+      cargarByte(memoria, 0x87);                                    //  ....
+      cargarInt(memoria, tabla[p].valor);                           //  Offset de memoria respecto de EDI
+
+      s = aLex(archivo);
+      if (s.simbolo != CIERRAPAREN) error(11, s);                   // Se esperaba CIERRAPAREN
+
       s = aLex(archivo);
       break;
   }
